@@ -1,0 +1,47 @@
+/* =========================
+   80mm THERMAL RECEIPT PRINT
+========================= */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Hide everything */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only thermal bill */
+  #print-area,
+  #print-area * {
+    visibility: visible;
+  }
+
+  #print-area {
+    width: 80mm;
+    max-width: 80mm;
+    padding: 6mm;
+    font-size: 12px;
+    font-family: monospace;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+  }
+
+  button,
+  input {
+    display: none !important;
+  }
+}

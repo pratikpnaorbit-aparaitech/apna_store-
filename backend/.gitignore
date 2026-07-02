@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# Build/Generated
+dist/
+public/bills/
+uploads/
+invoices/
+temp/
+
+# Logs
+*.log
+
+# Package lock (optional)
+package-lock.json
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Backups
+*.backup
+*.bak
