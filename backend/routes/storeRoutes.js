@@ -5,6 +5,7 @@ const verifyToken = require("../middleware/authMiddleware");
 const allowRole = require("../middleware/roleMiddleware");
 const Store = require("../models/Store");
 const User = require("../models/User");
+const Product = require("../models/Product");
 
 // Pull helpers from the model file (no separate util file needed)
 const { detectStoreType, STORE_TYPES } = Store;
@@ -14,9 +15,19 @@ const { detectStoreType, STORE_TYPES } = Store;
 router.get("/public", async (req, res) => {
   try {
     const stores = await Store.find({ isActive: true })
-      .select("name categories storeType address phone isActive")
+      .select("name categories storeType address phone isActive image_url cover_image_url")
       .sort({ createdAt: -1 });
-    res.json({ success: true, data: stores });
+    const storeIds = stores.map((store) => store._id);
+    const representativeProducts = await Product.aggregate([
+      { $match: { storeId: { $in: storeIds }, is_active: 1, image_url: { $nin: [null, ""] } } },
+      { $sort: { is_featured: -1, created_at: -1 } },
+      { $group: { _id: "$storeId", image: { $first: "$image_url" } } },
+    ]);
+    const productImages = new Map(representativeProducts.map((item) => [String(item._id), item.image]));
+    res.json({ success: true, data: stores.map((store) => ({
+      ...store.toObject(),
+      coverImage: store.cover_image_url || store.image_url || productImages.get(String(store._id)) || null,
+    })) });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to fetch stores" });
   }
@@ -26,7 +37,7 @@ router.get("/public", async (req, res) => {
 // @route POST /api/stores
 router.post("/", verifyToken, allowRole(["super_admin"]), async (req, res) => {
   try {
-    const { name, categories, address, phone, email, adminId, storeType } = req.body;
+    const { name, categories, address, phone, email, adminId, storeType, image_url, cover_image_url } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({ success: false, message: "Store name is required" });
@@ -60,6 +71,8 @@ router.post("/", verifyToken, allowRole(["super_admin"]), async (req, res) => {
       address,
       phone,
       email,
+      image_url,
+      cover_image_url,
       admin: adminId,
       createdBy: req.user.id,
     });

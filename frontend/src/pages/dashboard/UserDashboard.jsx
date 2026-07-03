@@ -42,14 +42,12 @@ const Skeleton = ({ w = "100%", h = 16, r = 8 }) => (
 export default function UserDashboard() {
   const navigate    = useNavigate();
   const [stores, setStores]         = useState([]);
-  const [featured, setFeatured]     = useState([]);
   const [categories, setCategories] = useState([]); // real categories from DB
   const [cartOpen, setCartOpen]     = useState(false);
   const [cartCount, setCartCount]   = useState(0);
   const [location, setLocation]     = useState("Detecting...");
   const [search, setSearch]         = useState("");
-  const [loading, setLoading]       = useState({ stores: true, featured: true });
-  const [favorites, setFavorites]   = useState([]);
+  const [loading, setLoading]       = useState({ stores: true });
   const [countdown, setCountdown]   = useState(3 * 3600 + 44 * 60 + 57);
   const [isMobile, setIsMobile]     = useState(window.innerWidth < 768);
   const searchRef = useRef();
@@ -73,10 +71,6 @@ export default function UserDashboard() {
   const loadCartCount = useCallback(() => {
     try { setCartCount(JSON.parse(localStorage.getItem("cart") || "[]").reduce((s, i) => s + (i.quantity || 0), 0)); }
     catch { setCartCount(0); }
-  }, []);
-
-  const loadFavorites = useCallback(() => {
-    try { setFavorites(JSON.parse(localStorage.getItem("favorites") || "[]")); } catch {}
   }, []);
 
   const getLocation = useCallback(() => {
@@ -111,15 +105,7 @@ export default function UserDashboard() {
       } catch { setStores([]); }
       finally { setLoading(p => ({ ...p, stores: false })); }
     })();
-    (async () => {
-      try {
-        const r = await PUBLIC.get("/inventory/public?featured=true");
-        const d = r.data;
-        setFeatured(Array.isArray(d) ? d : d?.products || d?.data || []);
-      } catch { setFeatured([]); }
-      finally { setLoading(p => ({ ...p, featured: false })); }
-    })();
-    loadCartCount(); loadFavorites(); getLocation();
+    loadCartCount(); getLocation();
     const onCart = () => loadCartCount();
     const onOpen = () => setCartOpen(true);
     window.addEventListener("cartUpdated", onCart);
@@ -128,10 +114,10 @@ export default function UserDashboard() {
       window.removeEventListener("cartUpdated", onCart);
       window.removeEventListener("openCartDrawer", onOpen);
     };
-  }, [loadCartCount, loadFavorites, getLocation]);
+  }, [loadCartCount, getLocation]);
 
   const handleSearch = e => {
-    if (e.key === "Enter" && search.trim()) navigate(`/category/${encodeURIComponent(search.trim())}`);
+    if (e.key === "Enter" && search.trim()) navigate(`/browse-stores?q=${encodeURIComponent(search.trim())}`);
   };
 
   /* ── Shared blocks ── */
@@ -195,7 +181,7 @@ export default function UserDashboard() {
         {categories.map(cat => {
           const meta = CATEGORY_EMOJI[cat] || { emoji: "🏷️", bg: "#f3f4f6" };
           return (
-            <div key={cat} onClick={() => navigate(`/category/${encodeURIComponent(cat)}`)}
+            <div key={cat} onClick={() => navigate(`/browse-stores?q=${encodeURIComponent(cat)}`)}
               style={{ flexShrink: 0, display: "flex", flexDirection: horizontal ? "column" : "row", alignItems: "center", gap: horizontal ? 6 : 12, cursor: "pointer", padding: horizontal ? 0 : "10px 14px", borderRadius: horizontal ? 0 : 14, background: horizontal ? "transparent" : "white", border: horizontal ? "none" : "1px solid #f3f4f6", transition: "all 0.18s" }}
               onMouseEnter={e => !horizontal && (e.currentTarget.style.background = "#f0fdf4")}
               onMouseLeave={e => !horizontal && (e.currentTarget.style.background = "white")}>
@@ -251,7 +237,7 @@ export default function UserDashboard() {
           <div style={{ margin: "0 14px", background: "white", borderRadius: "18px 18px 0 0", padding: "11px 16px", display: "flex", alignItems: "center", gap: 10 }}>
             <FaSearch color="#9ca3af" size={15} />
             <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} onKeyDown={handleSearch}
-              placeholder='Search products, stores...'
+              placeholder='Search stores or categories...'
               style={{ flex: 1, border: "none", outline: "none", fontSize: 15, color: "#374151", background: "transparent", fontFamily: "'DM Sans',sans-serif", fontWeight: 500 }} />
             {search && <button onClick={() => setSearch("")} style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 16, cursor: "pointer" }}>✕</button>}
           </div>
@@ -284,7 +270,7 @@ export default function UserDashboard() {
                   {categories.map(cat => {
                     const meta = CATEGORY_EMOJI[cat] || { emoji: "🏷️", bg: "#f3f4f6" };
                     return (
-                      <div key={cat} onClick={() => navigate(`/category/${encodeURIComponent(cat)}`)}
+                      <div key={cat} onClick={() => navigate(`/browse-stores?q=${encodeURIComponent(cat)}`)}
                         style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}>
                         <div style={{ width: 72, height: 72, borderRadius: 18, background: meta.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, boxShadow: "0 2px 10px rgba(0,0,0,0.09)" }}>
                           {meta.emoji}
@@ -305,7 +291,7 @@ export default function UserDashboard() {
                 <div style={{ fontWeight: 900, fontSize: 18, color: "#111827" }}>Stores Near You</div>
                 <div style={{ fontSize: 12, color: "#f59e0b", fontWeight: 700, marginTop: 2 }}>Trending near you ◆</div>
               </div>
-              <span onClick={() => navigate("/stores")} style={{ color: "#1a9c3e", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>View all &gt;</span>
+              <span onClick={() => navigate("/browse-stores")} style={{ color: "#1a9c3e", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>View all &gt;</span>
             </div>
             <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingLeft: 16, paddingBottom: 6, scrollbarWidth: "none" }}>
               {loading.stores ? [1,2,3].map(i => (
@@ -318,7 +304,7 @@ export default function UserDashboard() {
                 <div key={store._id} onClick={() => navigate(`/shop/${store._id}`)}
                   style={{ flexShrink: 0, width: 155, cursor: "pointer" }}>
                   <div style={{ height: 100, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, position: "relative" }}>
-                    🏪
+                    {store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 16 }} /> : "🏪"}
                     <div style={{ position: "absolute", bottom: 6, right: 8, background: "rgba(0,0,0,0.5)", padding: "2px 7px", borderRadius: 20, fontSize: 10, color: "white", fontWeight: 600 }}>15 min</div>
                   </div>
                   <div style={{ marginTop: 8, padding: "0 2px" }}>
@@ -339,23 +325,6 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* Featured products */}
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ padding: "0 16px", marginBottom: 14 }}>
-              <div style={{ fontWeight: 900, fontSize: 18, color: "#111827" }}>Featured Products</div>
-              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Handpicked for you</div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "0 14px" }}>
-              {loading.featured ? [1,2,3,4].map(i => (
-                <div key={i} style={{ background: "#f9fafb", borderRadius: 18, overflow: "hidden" }}>
-                  <Skeleton w="100%" h={140} r={0} />
-                  <div style={{ padding: 12 }}><Skeleton w="80%" h={13} /><div style={{ marginTop: 8 }}><Skeleton w="40%" h={16} /></div></div>
-                </div>
-              )) : featured.slice(0, 6).map(product => (
-                <ProductCard key={product._id} product={product} favorites={favorites} loadFavorites={loadFavorites} isMobile={true} />
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Bottom offer bar */}
@@ -407,7 +376,7 @@ export default function UserDashboard() {
           <div style={{ flex: 1, background: "white", borderRadius: 14, padding: "10px 18px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
             <FaSearch color="#9ca3af" size={16} />
             <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} onKeyDown={handleSearch}
-              placeholder="Search products, stores, categories..."
+              placeholder="Search stores or categories..."
               style={{ flex: 1, border: "none", outline: "none", fontSize: 15, color: "#374151", background: "transparent", fontFamily: "'DM Sans',sans-serif", fontWeight: 500 }} />
             {search && <button onClick={() => setSearch("")} style={{ background: "#f3f4f6", border: "none", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", color: "#6b7280" }}>✕</button>}
           </div>
@@ -450,7 +419,7 @@ export default function UserDashboard() {
           <div style={{ background: "white", borderRadius: 20, overflow: "hidden", boxShadow: "0 2px 16px rgba(0,0,0,0.07)" }}>
             <div style={{ background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: "white" }}>Stores</div>
-              <span onClick={() => navigate("/stores")} style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", cursor: "pointer", fontWeight: 600 }}>View all</span>
+              <span onClick={() => navigate("/browse-stores")} style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", cursor: "pointer", fontWeight: 600 }}>View all</span>
             </div>
             {loading.stores ? [1,2,3].map(i => (
               <div key={i} style={{ padding: "12px 18px", borderBottom: "1px solid #f5f5f5", display: "flex", alignItems: "center", gap: 10 }}>
@@ -462,7 +431,7 @@ export default function UserDashboard() {
                 style={{ padding: "12px 18px", borderBottom: i < stores.length - 1 ? "1px solid #f5f5f5" : "none", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", transition: "background 0.18s" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#f0fdf4"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🏪</div>
+                <div style={{ width: 38, height: 38, borderRadius: 10, overflow: "hidden", background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🏪"}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 13, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{store.name}</div>
                   <div style={{ fontSize: 11, color: "#1a9c3e", fontWeight: 600, marginTop: 2 }}>{(store.categories || []).join(", ")}</div>
@@ -518,7 +487,7 @@ export default function UserDashboard() {
                 {categories.map(cat => {
                   const meta = CATEGORY_EMOJI[cat] || { emoji: "🏷️", bg: "#f3f4f6" };
                   return (
-                    <div key={cat} onClick={() => navigate(`/category/${encodeURIComponent(cat)}`)}
+                    <div key={cat} onClick={() => navigate(`/browse-stores?q=${encodeURIComponent(cat)}`)}
                       style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "2px solid #e5e7eb", borderRadius: 50, padding: "10px 20px 10px 12px", cursor: "pointer", transition: "all 0.18s", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = "#1a9c3e"; e.currentTarget.style.background = "#f0fdf4"; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "white"; }}>
@@ -540,7 +509,7 @@ export default function UserDashboard() {
                   <FaFire size={11} /> Trending • Fast delivery
                 </div>
               </div>
-              <span onClick={() => navigate("/stores")} style={{ color: "#1a9c3e", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              <span onClick={() => navigate("/browse-stores")} style={{ color: "#1a9c3e", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                 View all <FaArrowRight size={10} />
               </span>
             </div>
@@ -554,7 +523,7 @@ export default function UserDashboard() {
                 <div key={store._id} className="store-card" onClick={() => navigate(`/shop/${store._id}`)}
                   style={{ background: "white", borderRadius: 20, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.07)", cursor: "pointer", transition: "all 0.25s" }}>
                   <div style={{ height: 110, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44, position: "relative" }}>
-                    🏪
+                    {store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🏪"}
                     <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(6px)", padding: "3px 9px", borderRadius: 20, fontSize: 10, color: "white", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                       <FaClock size={9} /> 15 min
                     </div>
@@ -576,23 +545,6 @@ export default function UserDashboard() {
             </div>
           </section>
 
-          {/* Featured products */}
-          <section style={{ marginBottom: 60 }}>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontWeight: 900, fontSize: 20, color: "#111827" }}>Featured Products</div>
-              <div style={{ fontSize: 13, color: "#6b7280", marginTop: 3 }}>Handpicked deals just for you</div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 18 }}>
-              {loading.featured ? [1,2,3,4,5,6].map(i => (
-                <div key={i} style={{ background: "white", borderRadius: 20, overflow: "hidden" }}>
-                  <Skeleton w="100%" h={160} r={0} />
-                  <div style={{ padding: 14 }}><Skeleton w="80%" h={14} /><div style={{ marginTop: 8 }}><Skeleton w="40%" h={18} /></div></div>
-                </div>
-              )) : featured.slice(0, 8).map(product => (
-                <ProductCard key={product._id} product={product} favorites={favorites} loadFavorites={loadFavorites} isMobile={false} />
-              ))}
-            </div>
-          </section>
         </main>
       </div>
 

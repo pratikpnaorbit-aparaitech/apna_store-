@@ -86,7 +86,7 @@ export default function UserTopbar() {
               className="bg-transparent outline-none w-full text-sm"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && e.target.value.trim()) {
-                  navigate(`/category/${encodeURIComponent(e.target.value.trim())}`);
+                  navigate(`/browse-stores?q=${encodeURIComponent(e.target.value.trim())}`);
                 }
               }}
             />

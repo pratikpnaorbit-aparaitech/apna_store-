@@ -15,9 +15,9 @@ export default function UserSidebar() {
 
   const menuItems = [
     { name: "Dashboard", path: "/user-dashboard", icon: <FaHome /> },
-    { name: "Browse Shops", path: "/shops", icon: <FaStore /> },
-    { name: "Products", path: "/products", icon: <FaBoxOpen /> },
-    { name: "My Orders", path: "/orders", icon: <FaClipboardList /> },
+    { name: "Browse Shops", path: "/browse-stores", icon: <FaStore /> },
+    { name: "Products", path: "/user-dashboard", icon: <FaBoxOpen /> },
+    { name: "My Orders", path: "/my-orders", icon: <FaClipboardList /> },
     
     
   ];

@@ -1,5 +1,4 @@
-import { Routes, Route } from "react-router-dom";
-import { Navigate } from "react-router-dom"
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 
 /* ================= PAGE IMPORTS ================= */
 
@@ -14,20 +13,19 @@ import SuperAdminDashboard from "./pages/dashboard/SuperAdminDashboard"; // Supe
 import UserDashboard from "./pages/dashboard/UserDashboard";             // User shopping home
 
 // User-facing pages
-import CategoryPage from "./pages/users/Category";         // Browse by category / search results
 import ShopPage from "./pages/users/ShopPage";             // Individual store page
 import ProductDetail from "./pages/users/ProductDetail";   // Product detail page
 import Checkout from "./pages/users/Checkout";             // Checkout page
 import OrderSuccess from "./pages/users/OrderSuccess";     // Order placed success page
 import MyOrders from "./pages/users/MyOrders";             // User's order history
 import ProfilePage from "./pages/users/ProfilePage";       // User account/profile page
+import CustomerStores from "./pages/users/CustomerStores";
 
 // Orders
 import Orders from "./pages/orders/Orders";               // Super admin orders view
 import AdminOrders from "./pages/orders/AdminOrders";     // Admin store orders view
 
 // Delivery
-import DeliveryLogin from "./pages/delivery/DeliveryLogin";         // Delivery partner login
 import DeliveryDashboard from "./pages/delivery/DeliveryDashboard"; // Delivery partner dashboard
 import DeliveryPartners from "./pages/delivery/DeliveryPartners";   // Super admin manage delivery partners
 
@@ -93,7 +91,7 @@ function App() {
       <Route path="/shop/:storeId" element={<ShopPage />} />           {/* Store page - public so anyone can browse */}
       <Route path="/product/:productId" element={<ProductDetail />} /> {/* Product detail - public */}
       <Route path="/order-success" element={<OrderSuccess />} />       {/* After order placed */}
-      <Route path="/delivery-login" element={<DeliveryLogin />} />     {/* Delivery partner login */}
+      <Route path="/delivery-login" element={<Navigate to="/login?role=delivery" replace />} />
        
 
 
@@ -109,7 +107,7 @@ function App() {
 
       <Route path="/category/:category" element={
         <ProtectedRoute roles={["user"]}>
-          <CategoryPage />
+          <CategoryStoreRedirect />
         </ProtectedRoute>
       } />
 
@@ -128,6 +126,12 @@ function App() {
       <Route path="/profile" element={
         <ProtectedRoute roles={["user"]}>
           <ProfilePage />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/browse-stores" element={
+        <ProtectedRoute roles={["user"]}>
+          <CustomerStores />
         </ProtectedRoute>
       } />
 
@@ -296,6 +300,11 @@ function App() {
 
     </Routes>
   );
+}
+
+function CategoryStoreRedirect() {
+  const { category } = useParams();
+  return <Navigate to={`/browse-stores?q=${encodeURIComponent(category || "")}`} replace />;
 }
 
 /* ─────────────────────────────────────────

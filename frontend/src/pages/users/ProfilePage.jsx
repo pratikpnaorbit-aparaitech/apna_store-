@@ -15,6 +15,8 @@ export default function ProfilePage() {
   const [email, setEmail] = useState(user.email || "");
   const [mobile, setMobile] = useState(user.mobile || "");
   const [saving, setSaving] = useState(false);
+  const [activeSheet, setActiveSheet] = useState(null);
+  const [savedAddress, setSavedAddress] = useState(localStorage.getItem("savedAddress") || "");
 
   const joinedDate = user.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })
@@ -23,8 +25,8 @@ export default function ProfilePage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await API.put("/users/profile", { name, email, mobile });
-      const updated = { ...user, name, email, mobile };
+      const { data } = await API.put("/users/profile", { name, email, mobile });
+      const updated = { ...user, ...(data.data || { name, email, mobile }) };
       localStorage.setItem("user", JSON.stringify(updated));
       setShowEdit(false);
       window.location.reload();
@@ -37,6 +39,7 @@ export default function ProfilePage() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("cart");
+    localStorage.removeItem("userLocation");
     navigate("/login");
   };
 
@@ -44,16 +47,16 @@ export default function ProfilePage() {
 
   const menuItems = [
     { icon: <FaShoppingBag size={17} />, label: "My Orders", action: () => navigate("/my-orders"), color: "#1a9c3e" },
-    { icon: <MdOutlineLocalOffer size={17} />, label: "My Refunds", action: () => {}, color: "#f59e0b" },
-    { icon: <FaBell size={17} />, label: "Help & Support", action: () => {}, color: "#6366f1" },
+    { icon: <MdOutlineLocalOffer size={17} />, label: "My Refunds", action: () => setActiveSheet("refunds"), color: "#f59e0b" },
+    { icon: <FaBell size={17} />, label: "Help & Support", action: () => setActiveSheet("support"), color: "#6366f1" },
   ];
 
   const listItems = [
-    { icon: <MdOutlineLocalOffer size={18} />, label: "Offers & Benefits" },
-    { icon: <FaMapMarkerAlt size={18} />, label: "Saved Addresses" },
-    { icon: <FaWallet size={18} />, label: "Payment Methods" },
-    { icon: <FaBell size={18} />, label: "Notifications" },
-    { icon: <FaInfoCircle size={18} />, label: "About" },
+    { icon: <MdOutlineLocalOffer size={18} />, label: "Offers & Benefits", action: () => setActiveSheet("offers") },
+    { icon: <FaMapMarkerAlt size={18} />, label: "Saved Addresses", action: () => setActiveSheet("address") },
+    { icon: <FaWallet size={18} />, label: "Payment Methods", action: () => setActiveSheet("payments") },
+    { icon: <FaBell size={18} />, label: "Notifications", action: () => setActiveSheet("notifications") },
+    { icon: <FaInfoCircle size={18} />, label: "About", action: () => setActiveSheet("about") },
   ];
 
   return (
@@ -101,7 +104,7 @@ export default function ProfilePage() {
       </div>
 
       {/* REFERRAL BANNER */}
-      <div style={{ margin: "0 16px 12px", background: "linear-gradient(135deg,#e8f5e9,#c8e6c9)", borderRadius: 16, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+      <div onClick={() => setActiveSheet("invite")} style={{ margin: "0 16px 12px", background: "linear-gradient(135deg,#e8f5e9,#c8e6c9)", borderRadius: 16, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
         <div>
           <div style={{ fontWeight: 800, fontSize: 15, color: "#1a9c3e" }}>🎁 Invite & Earn</div>
           <div style={{ fontSize: 12, color: "#2d6a4f", marginTop: 2 }}>Share SmartStore, earn rewards!</div>
@@ -115,7 +118,7 @@ export default function ProfilePage() {
       <div style={{ background: "white", borderRadius: 16, margin: "0 0 12px", overflow: "hidden" }}>
         {listItems.map((item, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: i < listItems.length - 1 ? "1px solid #f5f5f5" : "none", cursor: "pointer" }}
-            onClick={() => {}}>
+            onClick={item.action} role="button" tabIndex={0} onKeyDown={(event) => event.key === "Enter" && item.action()}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <span style={{ color: "#6b7280" }}>{item.icon}</span>
               <span style={{ fontWeight: 600, fontSize: 15, color: "#111" }}>{item.label}</span>
@@ -162,6 +165,22 @@ export default function ProfilePage() {
             <button onClick={handleSave} disabled={saving} style={{ width: "100%", background: "#1a9c3e", color: "white", border: "none", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 6, fontFamily: "'DM Sans', sans-serif" }}>
               {saving ? "Saving..." : "Save Changes"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {activeSheet && (
+        <div onClick={() => setActiveSheet(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 110, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(event) => event.stopPropagation()} style={{ width: "100%", maxWidth: 520, background: "white", borderRadius: "24px 24px 0 0", padding: 24, maxHeight: "75vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><strong style={{ fontSize: 19 }}>{({ refunds:"My Refunds", support:"Help & Support", offers:"Offers & Benefits", address:"Saved Address", payments:"Payment Methods", notifications:"Notifications", about:"About SmartStore", invite:"Invite & Earn" })[activeSheet]}</strong><button onClick={() => setActiveSheet(null)} style={{ border: 0, borderRadius: "50%", width: 34, height: 34, cursor: "pointer" }}>✕</button></div>
+            {activeSheet === "address" ? <><textarea value={savedAddress} onChange={(event) => setSavedAddress(event.target.value)} placeholder="House number, street, area, city and pincode" style={{ width:"100%", minHeight:110, border:"1.5px solid #e5e7eb", borderRadius:14, padding:14, boxSizing:"border-box", fontFamily:"inherit" }}/><button onClick={() => { localStorage.setItem("savedAddress", savedAddress); setActiveSheet(null); }} style={{ width:"100%", marginTop:12, border:0, borderRadius:14, padding:13, background:"#1a9c3e", color:"white", fontWeight:800, cursor:"pointer" }}>Save Address</button></>
+              : activeSheet === "offers" ? <p style={{ color:"#4b5563", lineHeight:1.7 }}>Use <strong>TRY50</strong> on eligible first orders. Available offers are shown automatically at checkout.</p>
+              : activeSheet === "payments" ? <p style={{ color:"#4b5563", lineHeight:1.7 }}>Pay securely using Razorpay UPI/cards or choose Cash on Delivery. Card and UPI details are never stored by SmartStore.</p>
+              : activeSheet === "notifications" ? <p style={{ color:"#4b5563", lineHeight:1.7 }}>Order, payment and delivery updates appear in the notification bell on your shopping dashboard.</p>
+              : activeSheet === "refunds" ? <><p style={{ color:"#4b5563" }}>Refund status is attached to the relevant order.</p><button onClick={() => navigate("/my-orders")} style={{ border:0, borderRadius:12, padding:"11px 16px", background:"#1a9c3e", color:"white", fontWeight:700, cursor:"pointer" }}>Open My Orders</button></>
+              : activeSheet === "support" ? <p style={{ color:"#4b5563", lineHeight:1.7 }}>For order help, quote the order number shown in My Orders and contact the store using the phone displayed on its page.</p>
+              : activeSheet === "invite" ? <><p style={{ color:"#4b5563" }}>Share SmartStore with friends.</p><button onClick={() => navigator.clipboard?.writeText(window.location.origin)} style={{ border:0, borderRadius:12, padding:"11px 16px", background:"#1a9c3e", color:"white", fontWeight:700, cursor:"pointer" }}>Copy Invite Link</button></>
+              : <p style={{ color:"#4b5563", lineHeight:1.7 }}>SmartStore connects nearby stores, customers and delivery partners for fast local delivery. Version 1.0.0.</p>}
           </div>
         </div>
       )}

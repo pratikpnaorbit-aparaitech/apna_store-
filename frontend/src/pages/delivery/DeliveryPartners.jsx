@@ -399,7 +399,7 @@ function DeliveryPartners() {
                   Setting password for <strong>{passwordPartner?.name}</strong>
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  They will login at <strong>/delivery-login</strong> using phone: <strong>{passwordPartner?.phone}</strong>
+                  They can select <strong>Delivery</strong> on the main login page using phone: <strong>{passwordPartner?.phone}</strong>
                 </p>
               </div>
               <div>

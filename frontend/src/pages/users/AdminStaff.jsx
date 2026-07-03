@@ -26,11 +26,8 @@ function AdminStaff() {
       
       // Fetch admin details
       const adminRes = await API.get(`/users/admins/${adminId}`);
-      setAdmin(adminRes.data.data);
-      
-      // Fetch staff under this admin
-      const staffRes = await API.get(`/users/admin/${adminId}/staff`);
-      setStaff(staffRes.data.data || []);
+      setAdmin(adminRes.data.data?.admin || null);
+      setStaff(adminRes.data.data?.staff || []);
       
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -188,4 +185,4 @@ function AdminStaff() {
   );
 }
 
-export default AdminStaff;  
+export default AdminStaff;

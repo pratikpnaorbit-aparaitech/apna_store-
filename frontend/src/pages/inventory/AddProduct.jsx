@@ -37,7 +37,7 @@ function AddProduct() {
 
     const { name, sku, category, price, stock, expiryDate } = product;
 
-    if (!name || !sku || !price || !stock) {
+    if (!name || !sku || price === "" || stock === "") {
       alert("Please fill all required fields");
       return;
     }
@@ -72,7 +72,7 @@ function AddProduct() {
     } catch (error) {
 
       console.error("Add product error:", error);
-      alert("Failed to add product ❌");
+      alert(error.response?.data?.message || "Failed to add product ❌");
 
     } finally {
 

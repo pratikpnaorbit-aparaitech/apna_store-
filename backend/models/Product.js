@@ -73,6 +73,11 @@ const productSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  description: {
+    type: String,
+    trim: true,
+    default: null,
+  },
 
   storeId: {
     type: mongoose.Schema.Types.ObjectId,

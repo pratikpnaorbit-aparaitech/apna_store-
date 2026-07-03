@@ -94,6 +94,8 @@ export default function ShopPage() {
 
       {/* HERO */}
       <div style={{ position: "relative", height: 220, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", overflow: "hidden" }}>
+        {store?.coverImage && <img src={store.coverImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+        {store?.coverImage && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top,rgba(0,0,0,.75),rgba(0,0,0,.12))" }} />}
         <button onClick={() => navigate(-1)} style={{ position: "absolute", top: 16, left: 16, zIndex: 10, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <FaArrowLeft color="white" size={15} />
         </button>

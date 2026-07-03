@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { FaEye, FaEyeSlash, FaStore, FaUser, FaMotorcycle, FaMapMarkerAlt, FaLocationArrow } from "react-icons/fa";
 import { IoFlash } from "react-icons/io5";
@@ -239,6 +239,7 @@ function LocationCheck({ onSuccess, onBack }) {
 ───────────────────────────────────────── */
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tab, setTab]           = useState("user");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -247,6 +248,10 @@ export default function Login() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
   const [showLocation, setShowLocation] = useState(false); // show location check screen
+
+  useEffect(() => {
+    if (searchParams.get("role") === "delivery") setTab("delivery");
+  }, [searchParams]);
 
   const handleLogin = async () => {
     setError("");

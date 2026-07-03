@@ -115,7 +115,7 @@ export default function DeliveryDashboard() {
 
   useEffect(() => {
     const dp = localStorage.getItem("dp_user");
-    if (!dp || !dpToken) { navigate("/delivery-login"); return; }
+    if (!dp || !dpToken) { navigate("/login?role=delivery"); return; }
     setPartner(JSON.parse(dp));
     fetchOrders();
     return () => stopLocationSharing();
@@ -218,7 +218,7 @@ export default function DeliveryDashboard() {
       const res = await API.get("/delivery-partners/my-orders");
       setOrders(res.data?.data || []);
     } catch (err) {
-      if (err.response?.status === 401) navigate("/delivery-login");
+      if (err.response?.status === 401) navigate("/login?role=delivery");
     } finally {
       setLoading(false);
     }
@@ -240,7 +240,7 @@ export default function DeliveryDashboard() {
     stopLocationSharing();
     localStorage.removeItem("dp_token");
     localStorage.removeItem("dp_user");
-    navigate("/delivery-login");
+    navigate("/login?role=delivery");
   };
 
   const formatDate = (d) => new Date(d).toLocaleDateString("en-IN", {
@@ -279,8 +279,8 @@ export default function DeliveryDashboard() {
               title="GPS Debug Panel">
               <Bug size={16} />
             </button>
-            <button onClick={logout} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition">
-              <FaSignOutAlt />
+            <button onClick={logout} aria-label="Log out" className="flex items-center gap-2 px-3 py-2 bg-white/20 rounded-lg hover:bg-white/30 transition font-semibold text-xs">
+              <FaSignOutAlt /> <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>

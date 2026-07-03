@@ -44,6 +44,7 @@ router.get("/my-staff", verifyToken, allowRole(["admin"]), userController.getMyS
 router.post("/my-staff", verifyToken, allowRole(["admin"]), userController.createMyStaff);
 router.put("/my-staff/:id", verifyToken, allowRole(["admin"]), userController.updateMyStaff);
 router.delete("/my-staff/:id", verifyToken, allowRole(["admin"]), userController.deleteMyStaff);
+router.post("/admin/:adminId/staff", verifyToken, allowRole(["super_admin"]), userController.createStaffForAdmin);
 
 // ==================== GENERAL USER MANAGEMENT (super_admin only) ====================
 // Static paths must be registered before /:id so Express does not treat
@@ -53,7 +54,7 @@ router.get("/admins/:id", verifyToken, allowRole(["super_admin"]), userControlle
 router.post("/admins", verifyToken, allowRole(["super_admin"]), userController.createAdmin);
 router.put("/admins/:id", verifyToken, allowRole(["super_admin"]), userController.updateAdmin);
 router.delete("/admins/:id", verifyToken, allowRole(["super_admin"]), userController.deleteAdmin);
-router.get("/registered-users", getRegisteredUsers);
+router.get("/registered-users", verifyToken, allowRole(["super_admin"]), getRegisteredUsers);
 
 router.get("/", verifyToken, allowRole(["super_admin"]), userController.getAllUsers);
 router.post("/", verifyToken, allowRole(["super_admin"]), userController.createUser);

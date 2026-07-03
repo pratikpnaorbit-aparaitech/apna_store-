@@ -24,6 +24,7 @@ export default function Category() {
   const navigate = useNavigate();
   const decodedCategory = decodeURIComponent(category);
   const [products, setProducts] = useState([]);
+  const [stores, setStores] = useState([]);
   const [cart, setCart] = useState(JSON.parse(localStorage.getItem("cart") || "[]"));
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -42,7 +43,13 @@ export default function Category() {
         } else {
           res = await PUBLIC.get(`/inventory/public?search=${encodeURIComponent(decodedCategory)}`);
         }
+        const storeResponse = await PUBLIC.get("/stores/public");
+        const query = decodedCategory.toLowerCase();
         setProducts(res.data || []);
+        setStores((storeResponse.data?.data || []).filter((store) =>
+          store.name?.toLowerCase().includes(query) ||
+          (store.categories || []).some((value) => value.toLowerCase().includes(query))
+        ));
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
@@ -105,6 +112,17 @@ export default function Category() {
 
       {/* PRODUCTS */}
       <div style={{ padding: "0 16px" }}>
+        {!loading && stores.length > 0 && (
+          <section style={{ marginBottom: 22 }}>
+            <h2 style={{ fontWeight: 900, fontSize: 18, margin: "4px 0 12px" }}>Matching Stores</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
+              {stores.map((store) => <button key={store._id} onClick={() => navigate(`/shop/${store._id}`)} style={{ border: "none", padding: 0, borderRadius: 18, overflow: "hidden", background: "white", textAlign: "left", cursor: "pointer", boxShadow: "0 3px 14px rgba(0,0,0,.08)" }}>
+                <div style={{ height: 120, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44 }}>{store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🏪"}</div>
+                <div style={{ padding: 14 }}><div style={{ fontWeight: 800, fontSize: 15 }}>{store.name}</div><div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>{(store.categories || []).join(" • ") || store.storeType}</div></div>
+              </button>)}
+            </div>
+          </section>
+        )}
         {loading ? (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {[1,2,3,4].map(i => (

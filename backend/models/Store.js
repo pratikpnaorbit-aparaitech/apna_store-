@@ -66,6 +66,8 @@ const storeSchema = new mongoose.Schema(
 
     phone: { type: String, trim: true },
     email: { type: String, trim: true, lowercase: true },
+    image_url: { type: String, trim: true, default: null },
+    cover_image_url: { type: String, trim: true, default: null },
 
     /* ================= RELATIONSHIPS ================= */
     admin: {

@@ -73,8 +73,9 @@ exports.getProfile = async (req, res) => {
 // @desc    Update own profile
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, email } = req.body;
-    const user = await User.findByIdAndUpdate(req.user.id, { name, email }, { returnDocument: "after", runValidators: true }).select('-password');
+    const { name, email, mobile } = req.body;
+    const user = await User.findByIdAndUpdate(req.user.id, { name, email, mobile: mobile || undefined }, { returnDocument: "after", runValidators: true }).select('-password');
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
     res.json({ success: true, message: "Profile updated successfully", data: user });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to update profile" });
@@ -173,6 +174,28 @@ exports.deleteMyStaff = async (req, res) => {
   } catch (err) {
     console.error("DELETE MY STAFF ERROR:", err);
     res.status(500).json({ success: false, message: "Failed to delete staff member" });
+  }
+};
+
+exports.createStaffForAdmin = async (req, res) => {
+  try {
+    const { adminId } = req.params;
+    const { name, email, password, mobile } = req.body;
+    if (!name || !email || !password || password.length < 6) {
+      return res.status(400).json({ success: false, message: "Name, email and a 6-character password are required" });
+    }
+    const admin = await User.findOne({ _id: adminId, role: "admin", isActive: true }).select("storeId");
+    if (!admin?.storeId) return res.status(400).json({ success: false, message: "This admin has no assigned store" });
+    if (await User.exists({ email: email.toLowerCase() })) return res.status(409).json({ success: false, message: "Email is already registered" });
+    const staff = await User.create({
+      name, email, mobile: mobile || undefined,
+      password: await bcrypt.hash(password, 10), role: "staff",
+      storeId: admin.storeId, createdBy: req.user.id, isActive: true,
+    });
+    res.status(201).json({ success: true, data: { _id: staff._id, name: staff.name, email: staff.email, role: staff.role } });
+  } catch (error) {
+    console.error("CREATE ADMIN STAFF ERROR:", error.message);
+    res.status(500).json({ success: false, message: "Failed to create staff" });
   }
 };
 

@@ -149,7 +149,10 @@ function LiveTrackingMap({ deliveryPartnerId, deliveryPartnerName }) {
   return (
     <div style={{ borderRadius: 16, overflow: "hidden", border: "2px solid #e5e7eb" }}>
       {/* Map */}
-      <div ref={mapRef} style={{ height: 220, width: "100%", background: "#e8e8e8" }} />
+      <div style={{ position: "relative", height: 220, background: "linear-gradient(135deg,#eef2f7,#e2e8f0)" }}>
+        <div ref={mapRef} style={{ height: 220, width: "100%" }} />
+        {!location && <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,rgba(245,243,255,.96),rgba(238,242,255,.96))", color: "#6d28d9" }}><div style={{ fontSize: 40 }}>🛵</div><div style={{ marginTop: 8, fontWeight: 800, fontSize: 14 }}>Waiting for rider GPS</div><div style={{ marginTop: 4, fontSize: 12, color: "#8b5cf6" }}>The map will appear after the rider shares location</div></div>}
+      </div>
 
       {/* Status bar below map */}
       <div style={{ background: "white", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
