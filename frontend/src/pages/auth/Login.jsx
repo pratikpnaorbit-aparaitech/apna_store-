@@ -316,12 +316,21 @@ export default function Login() {
         />
       )}
 
-      <div style={{ fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", background: "#f5f5f0", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="smart-login-page" style={{ fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", background: "#f7faf6 url('/smartstore-login-bg.png') center/cover no-repeat", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, boxSizing:"border-box" }}>
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-        <div style={{ width: "100%", maxWidth: 400 }}>
+        <style>{`
+          .smart-login-shell{width:100%;max-width:460px}
+          .smart-login-card{backdrop-filter:blur(14px)}
+          .smart-login-benefits{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;position:fixed;left:50%;bottom:28px;transform:translateX(-50%);width:min(1160px,88vw)}
+          .smart-login-benefit{display:flex;align-items:center;gap:12px;color:#243127}
+          .smart-login-benefit-icon{width:44px;height:44px;border-radius:50%;background:rgba(232,248,232,.92);display:flex;align-items:center;justify-content:center;font-size:20px;color:#16933b;flex-shrink:0}
+          @media(max-height:820px){.smart-login-benefits{display:none}.smart-login-page{padding-top:16px;padding-bottom:16px}.smart-login-logo{margin-bottom:14px!important}}
+          @media(max-width:760px){.smart-login-page{background-position:center bottom;padding:20px 16px}.smart-login-shell{max-width:420px}.smart-login-benefits{display:none}}
+        `}</style>
+        <div className="smart-login-shell">
 
           {/* LOGO */}
-          <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div className="smart-login-logo" style={{ textAlign: "center", marginBottom: 24 }}>
             <div style={{ width: 64, height: 64, borderRadius: 20, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", boxShadow: "0 8px 24px rgba(26,156,62,0.3)" }}>
               <IoFlash color="#facc15" size={32} />
             </div>
@@ -330,7 +339,7 @@ export default function Login() {
           </div>
 
           {/* CARD */}
-          <div style={{ background: "white", borderRadius: 24, padding: 28, boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
+          <div className="smart-login-card" style={{ background: "rgba(255,255,255,.94)", borderRadius: 24, padding: 28, border:"1px solid rgba(255,255,255,.8)", boxShadow: "0 18px 55px rgba(31,67,40,0.16)" }}>
             <h2 style={{ fontWeight: 800, fontSize: 22, color: "#111", marginBottom: 4, marginTop: 0 }}>Welcome back 👋</h2>
             <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 20, marginTop: 0 }}>Sign in to continue</p>
 
@@ -410,6 +419,9 @@ export default function Login() {
               <div style={{ fontSize: 11, color: "#9ca3af" }}>USE TRY50 | Above ₹99</div>
             </div>
           </div>
+        </div>
+        <div className="smart-login-benefits">
+          {[["🛡","Safe & Secure","100% secure payments"],["◷","On-time Delivery","Lightning fast delivery"],["%","Best Offers","Exciting offers & deals"],["🎧","24/7 Support","We're here to help"]].map(([icon,title,sub]) => <div className="smart-login-benefit" key={title}><div className="smart-login-benefit-icon">{icon}</div><div><div style={{fontWeight:800,fontSize:14}}>{title}</div><div style={{color:"#718076",fontSize:12,marginTop:2}}>{sub}</div></div></div>)}
         </div>
       </div>
     </>

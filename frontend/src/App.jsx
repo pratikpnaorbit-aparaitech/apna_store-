@@ -42,6 +42,7 @@ import Stores from "./pages/stores/Stores"; // Super admin manage stores
 // Customers
 import Customers from "./pages/customers/Customers";                     // Admin view customers
 import RegisteredCustomers from "./pages/customers/RegisteredCustomers"; // Super admin registered users
+import SupportTickets from "./pages/support/SupportTickets";
 
 // Inventory
 import Inventory from "./pages/inventory/Inventory";                   // Admin/Staff inventory list
@@ -186,6 +187,12 @@ function App() {
       <Route path="/registered-customers" element={
         <ProtectedRoute roles={["super_admin"]}>
           <SuperAdminLayout><RegisteredCustomers /></SuperAdminLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/support-tickets" element={
+        <ProtectedRoute roles={["super_admin"]}>
+          <SuperAdminLayout><SupportTickets /></SuperAdminLayout>
         </ProtectedRoute>
       } />
 

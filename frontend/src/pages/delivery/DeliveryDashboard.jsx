@@ -101,7 +101,7 @@ export default function DeliveryDashboard() {
   const [locationError, setLocationError] = useState("");
   const [myLocation, setMyLocation] = useState(null); // { lat, lng }
   const [serverLocation, setServerLocation] = useState(null); // what server stored
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
   const [lastPushed, setLastPushed] = useState(null);
   const locationIntervalRef = useRef(null);
 
@@ -255,7 +255,7 @@ export default function DeliveryDashboard() {
 
       {/* Header */}
       <header className="bg-orange-500 text-white px-4 py-4 sticky top-0 z-30 shadow-md">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
               <FaMotorcycle size={18} />
@@ -276,7 +276,7 @@ export default function DeliveryDashboard() {
             {/* Debug toggle button */}
             <button onClick={() => setShowDebug(!showDebug)}
               className={`p-2 rounded-lg transition ${showDebug ? "bg-white/40" : "bg-white/20 hover:bg-white/30"}`}
-              title="GPS Debug Panel">
+              title="Live location panel">
               <Bug size={16} />
             </button>
             <button onClick={logout} aria-label="Log out" className="flex items-center gap-2 px-3 py-2 bg-white/20 rounded-lg hover:bg-white/30 transition font-semibold text-xs">
@@ -286,7 +286,7 @@ export default function DeliveryDashboard() {
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
         {/* ── GPS DEBUG PANEL ── */}
         {showDebug && (
@@ -294,9 +294,9 @@ export default function DeliveryDashboard() {
             <div className="bg-orange-50 px-4 py-3 flex items-center justify-between border-b border-orange-100">
               <div className="flex items-center gap-2">
                 <Bug size={16} className="text-orange-500" />
-                <span className="font-bold text-orange-700 text-sm">GPS Debug Panel</span>
+                <span className="font-bold text-orange-700 text-sm">Live Location</span>
               </div>
-              <span className="text-xs text-orange-500">Verify your location is correct</span>
+              <span className="text-xs text-green-600 font-semibold">● {locationStatus === "sharing" ? "Sharing Live" : "GPS ready"}</span>
             </div>
 
             <div className="p-4 space-y-4">
@@ -305,7 +305,7 @@ export default function DeliveryDashboard() {
               <button onClick={testLocation}
                 className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold transition">
                 <MapPin size={16} />
-                Test — Get & Push My Location Now
+                Refresh Location
               </button>
 
               {/* Coordinates comparison */}
@@ -356,10 +356,10 @@ export default function DeliveryDashboard() {
               {/* Mini map showing YOUR position */}
               {myLocation && (
                 <div>
-                  <p className="text-xs font-bold text-gray-500 mb-2">📍 Your position on map (this is what customer sees)</p>
+                  <p className="text-xs font-bold text-gray-500 mb-2">📍 Your live position</p>
                   <MiniMap lat={myLocation.lat} lng={myLocation.lng} />
                   <p className="text-xs text-center text-gray-400 mt-2">
-                    If this pin is in the right place, the customer map is also correct ✅
+                    Customers can see this location during active delivery
                   </p>
                 </div>
               )}

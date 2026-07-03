@@ -6,7 +6,7 @@ import {
 } from "react-icons/fa";
 import {
   LayoutDashboard, Store, UserCheck, UserCircle, Truck,
-  Package, ShoppingCart, BarChart2, ChevronRight, Users
+  Package, ShoppingCart, BarChart2, ChevronRight, LifeBuoy
 } from "lucide-react";
 
 /* ── Super admin menu — only routes that actually exist in App.jsx ── */
@@ -18,6 +18,7 @@ const superAdminMenu = [
   { label: "Delivery",      path: "/delivery",              icon: Truck },
   { label: "Inventory",     path: "/inventory",             icon: Package },
   { label: "Orders",        path: "/orders",                icon: ShoppingCart },
+  { label: "Support",       path: "/support-tickets",       icon: LifeBuoy },
   { label: "Reports",       path: "/reports",               icon: BarChart2 },
 ];
 

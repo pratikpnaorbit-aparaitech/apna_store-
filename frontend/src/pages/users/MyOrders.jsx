@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { API } from "../../services/api";
 import { useNavigate } from "react-router-dom";
-import { FaArrowLeft, FaChevronRight, FaMapMarkerAlt, FaTimes, FaMotorcycle } from "react-icons/fa";
+import { FaArrowLeft, FaChevronRight, FaMapMarkerAlt, FaTimes, FaMotorcycle, FaSearch } from "react-icons/fa";
 
 const STATUS_CONFIG = {
   Placed:             { color: "#3b82f6", bg: "#eff6ff", icon: "🕐", label: "Order Placed" },
@@ -182,6 +182,8 @@ export default function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [search, setSearch] = useState("");
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
@@ -215,6 +217,13 @@ export default function MyOrders() {
   });
 
   const getStepIndex = (status) => STEPS.indexOf(status);
+  const visibleOrders = orders.filter((order) => {
+    const matchesStatus = statusFilter === "All" || (statusFilter === "In Progress"
+      ? !["Delivered", "Cancelled"].includes(order.status)
+      : order.status === statusFilter);
+    const haystack = `${order._id} ${order.items?.map((item) => item.name).join(" ") || ""}`.toLowerCase();
+    return matchesStatus && haystack.includes(search.toLowerCase());
+  });
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#f5f5f0", minHeight: "100vh", paddingBottom: 40 }}>
@@ -223,17 +232,24 @@ export default function MyOrders() {
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.3)} }
         @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+        .orders-header{padding:26px 4%!important}.orders-header-title{font-size:30px!important}.orders-toolbar{display:flex!important}.orders-shell{max-width:1780px!important;padding:24px 4%!important}.orders-list{gap:20px!important}.order-card{padding:28px!important;border-radius:18px!important}.order-card-main{margin-bottom:20px!important}.order-card-icon{width:64px!important;height:64px!important;border-radius:50%!important;font-size:26px!important}.order-card-name{font-size:20px!important}.order-card-meta{font-size:14px!important}.order-card-price{font-size:22px!important}.orders-summary{display:grid!important}
+        @media(max-width:760px){.orders-header{padding:16px 20px!important}.orders-header-title{font-size:18px!important}.orders-toolbar{display:none!important}.orders-shell{max-width:600px!important;padding:16px!important}.orders-list{gap:12px!important}.order-card{padding:16px!important}.order-card-main{margin-bottom:12px!important}.order-card-icon{width:44px!important;height:44px!important;border-radius:12px!important;font-size:20px!important}.order-card-name{font-size:14px!important}.order-card-meta{font-size:12px!important}.order-card-price{font-size:16px!important}.orders-summary{display:none!important}}
       `}</style>
 
       {/* HEADER */}
-      <div style={{ background: "white", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid #f0f0f0", position: "sticky", top: 0, zIndex: 40 }}>
+      <div className="orders-header" style={{ background: "white", padding: "16px 20px", display: "flex", alignItems: "center", gap: 18, borderBottom: "1px solid #e8ece8", position: "sticky", top: 0, zIndex: 40 }}>
         <button onClick={() => navigate(-1)} style={{ background: "#f5f5f5", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <FaArrowLeft size={14} color="#374151" />
         </button>
-        <span style={{ fontWeight: 800, fontSize: 18, color: "#111" }}>My Orders</span>
+        <div><div className="orders-header-title" style={{ fontWeight: 800, fontSize: 18, color: "#111" }}>My Orders</div><div style={{fontSize:13,color:"#778077",marginTop:2}}>Track and view all your orders</div></div>
       </div>
 
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "16px" }}>
+      <div className="orders-toolbar" style={{display:"none",background:"white",padding:"22px 4%",alignItems:"center",justifyContent:"space-between",gap:24,borderBottom:"1px solid #e8ece8"}}>
+        <div style={{display:"flex",gap:10}}>{["All","Placed","In Progress","Delivered","Cancelled"].map((label)=><button key={label} onClick={()=>setStatusFilter(label)} style={{border:0,borderRadius:12,padding:"12px 18px",fontWeight:800,cursor:"pointer",background:statusFilter===label?"#eef8f0":"transparent",color:statusFilter===label?"#178f3b":"#667085"}}>{label === "All" ? "All Orders" : label}</button>)}</div>
+        <div style={{display:"flex",alignItems:"center",gap:10,width:420,border:"1px solid #dfe5df",borderRadius:14,padding:"12px 16px"}}><FaSearch color="#94a3b8"/><input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search orders..." style={{border:0,outline:0,flex:1,fontFamily:"inherit",fontSize:14}}/></div>
+      </div>
+
+      <div className="orders-shell" style={{ maxWidth: 600, margin: "0 auto", padding: "16px" }}>
         {loading && orders.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {[1,2,3].map(i => (
@@ -250,11 +266,11 @@ export default function MyOrders() {
             </button>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {orders.map(order => {
+          <div className="orders-list" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {visibleOrders.map(order => {
               const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Placed;
               return (
-                <div key={order._id} onClick={() => setSelected(order)}
+                <div className="order-card" key={order._id} onClick={() => setSelected(order)}
                   style={{ background: "white", borderRadius: 16, padding: 16, boxShadow: "0 2px 12px rgba(0,0,0,0.06)", cursor: "pointer", border: order.status === "Out for Delivery" ? "2px solid #8b5cf6" : "2px solid transparent" }}>
 
                   {/* Live badge for out for delivery */}
@@ -265,17 +281,17 @@ export default function MyOrders() {
                     </div>
                   )}
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <div className="order-card-main" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, animation: order.status === "Out for Delivery" ? "bounce 1.5s infinite" : "none" }}>
+                      <div className="order-card-icon" style={{ width: 44, height: 44, borderRadius: 12, background: cfg.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, animation: order.status === "Out for Delivery" ? "bounce 1.5s infinite" : "none" }}>
                         {cfg.icon}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: "#111" }}>
+                        <div className="order-card-name" style={{ fontWeight: 700, fontSize: 14, color: "#111" }}>
                           {order.items?.slice(0, 2).map(i => i.name).join(", ")}
                           {order.items?.length > 2 ? ` +${order.items.length - 2} more` : ""}
                         </div>
-                        <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                        <div className="order-card-meta" style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
                           {order.items?.length} item{order.items?.length > 1 ? "s" : ""} • {formatDate(order.createdAt)}
                         </div>
                       </div>
@@ -286,13 +302,14 @@ export default function MyOrders() {
                     <span style={{ background: cfg.bg, color: cfg.color, fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 20 }}>
                       {cfg.label}
                     </span>
-                    <span style={{ fontWeight: 800, fontSize: 16, color: "#111" }}>₹{order.totalAmount}</span>
+                    <span className="order-card-price" style={{ fontWeight: 800, fontSize: 16, color: "#111" }}>₹{order.totalAmount}</span>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
+        {orders.length > 0 && <div className="orders-summary" style={{display:"none",gridTemplateColumns:"repeat(4,1fr)",background:"white",border:"1px solid #e5e7eb",borderRadius:16,marginTop:26,padding:20,textAlign:"center"}}>{[[orders.length,"Total Orders"],[orders.filter(o=>o.status==="Delivered").length,"Delivered"],[orders.filter(o=>!["Delivered","Cancelled"].includes(o.status)).length,"In Progress"],[orders.filter(o=>o.status==="Cancelled").length,"Cancelled"]].map(([value,label])=><div key={label} style={{borderRight:label!=="Cancelled"?"1px solid #e5e7eb":0}}><div style={{fontSize:22,fontWeight:900}}>{value}</div><div style={{fontSize:13,color:"#768076"}}>{label}</div></div>)}</div>}
       </div>
 
       {/* ORDER DETAIL BOTTOM SHEET */}

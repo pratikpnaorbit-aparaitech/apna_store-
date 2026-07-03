@@ -82,7 +82,11 @@ export default function ShopPage() {
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#f5f5f0" }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .store-hero{height:300px!important}.store-info{justify-content:space-around;padding:22px 5%!important}.store-search-wrap{padding:24px 3.5% 14px!important}.store-search{padding:16px 20px!important;border:1px solid #e5e7eb}.store-tabs{padding:0 3.5%!important;margin:14px 0 24px!important}.store-products{padding:0 3.5%!important}.store-products-grid{grid-template-columns:1fr!important;gap:18px!important}.store-product-card{display:grid!important;grid-template-columns:300px 1fr;min-height:270px;border:1px solid #eef0ed}.store-product-media{height:270px!important}.store-product-body{padding:36px!important;display:flex;flex-direction:column;justify-content:center}.store-product-action{position:static!important;width:150px!important;height:48px!important;border-radius:14px!important;margin-top:24px}.store-products-title{display:block!important}
+        @media(max-width:760px){.store-hero{height:220px!important}.store-info{justify-content:flex-start;padding:10px 16px!important}.store-search-wrap{padding:12px 16px!important}.store-search{padding:10px 14px!important}.store-tabs{padding:0 16px!important;margin:0 0 16px!important}.store-products{padding:0 16px!important}.store-products-grid{grid-template-columns:1fr 1fr!important;gap:12px!important}.store-product-card{display:block!important;min-height:0}.store-product-media{height:130px!important}.store-product-body{padding:10px 12px!important;display:block}.store-product-action{position:absolute!important;width:34px!important;height:34px!important;border-radius:10px!important;margin:0}.store-products-title{display:none!important}}
+      `}</style>
       <div style={{ width: 40, height: 40, border: "4px solid #e5e7eb", borderTop: "4px solid #1a9c3e", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
     </div>
   );
@@ -93,7 +97,7 @@ export default function ShopPage() {
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* HERO */}
-      <div style={{ position: "relative", height: 220, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", overflow: "hidden" }}>
+      <div className="store-hero" style={{ position: "relative", height: 220, background: "linear-gradient(120deg,#064e2b,#129447)", overflow: "hidden" }}>
         {store?.coverImage && <img src={store.coverImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
         {store?.coverImage && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top,rgba(0,0,0,.75),rgba(0,0,0,.12))" }} />}
         <button onClick={() => navigate(-1)} style={{ position: "absolute", top: 16, left: 16, zIndex: 10, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
@@ -125,7 +129,7 @@ export default function ShopPage() {
       </div>
 
       {/* INFO STRIP */}
-      <div style={{ background: "white", padding: "10px 16px", display: "flex", gap: 20, borderBottom: "1px solid #f0f0f0" }}>
+      <div className="store-info" style={{ background: "white", padding: "10px 16px", display: "flex", gap: 20, borderBottom: "1px solid #f0f0f0" }}>
         {[{v:"4.5 ⭐",l:"Rating"},{v:"15 min",l:"Delivery"},{v:"₹40",l:"Delivery fee"},{v:products.length,l:"Products",g:true}].map((s,i)=>(
           <div key={i} style={{ textAlign: "center" }}>
             <div style={{ fontWeight: 800, fontSize: 14, color: s.g ? "#1a9c3e" : "#111" }}>{s.v}</div>
@@ -135,8 +139,8 @@ export default function ShopPage() {
       </div>
 
       {/* SEARCH */}
-      <div style={{ padding: "12px 16px" }}>
-        <div style={{ background: "white", borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
+      <div className="store-search-wrap" style={{ padding: "12px 16px" }}>
+        <div className="store-search" style={{ background: "white", borderRadius: 12, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
           <FaSearch color="#9ca3af" size={13} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search in this store..."
             style={{ flex: 1, border: "none", outline: "none", fontSize: 13, color: "#374151", background: "transparent" }} />
@@ -144,7 +148,7 @@ export default function ShopPage() {
       </div>
 
       {/* CATEGORY TABS */}
-      <div style={{ padding: "0 16px", marginBottom: 16 }}>
+      <div className="store-tabs" style={{ padding: "0 16px", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
           {categories.map(cat => (
             <button key={cat} onClick={() => setCategoryFilter(cat)}
@@ -156,21 +160,22 @@ export default function ShopPage() {
       </div>
 
       {/* PRODUCTS GRID */}
-      <div style={{ padding: "0 16px" }}>
+      <div className="store-products" style={{ padding: "0 16px" }}>
+        <h2 className="store-products-title" style={{display:"none",fontSize:20,margin:"0 0 16px",color:"#18201a"}}>All Products ({filtered.length})</h2>
         {filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 0", color: "#9ca3af" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🛒</div>
             <div style={{ fontWeight: 700, fontSize: 16 }}>No products found</div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="store-products-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {filtered.map(product => {
               const qty = getQty(product._id);
               return (
-                <div key={product._id}
+                <div className="store-product-card" key={product._id}
                   onClick={() => navigate(`/product/${product._id}`)}
                   style={{ background: "white", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.07)", cursor: "pointer" }}>
-                  <div style={{ position: "relative", height: 130, background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div className="store-product-media" style={{ position: "relative", height: 130, background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {product.image_url
                       ? <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       : <span style={{ fontSize: 42 }}>📦</span>
@@ -179,7 +184,7 @@ export default function ShopPage() {
                       <span style={{ position: "absolute", top: 8, left: 8, background: "#1a9c3e", color: "white", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 20 }}>⭐ Bestseller</span>
                     )}
                     {qty === 0 ? (
-                      <button onClick={e => addToCart(e, product)}
+                      <button className="store-product-action" onClick={e => addToCart(e, product)}
                         style={{ position: "absolute", bottom: 8, right: 8, background: "#1a9c3e", color: "white", border: "none", borderRadius: 10, width: 34, height: 34, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, boxShadow: "0 2px 8px rgba(26,156,62,0.4)" }}>
                         +
                       </button>
@@ -192,7 +197,7 @@ export default function ShopPage() {
                       </div>
                     )}
                   </div>
-                  <div style={{ padding: "10px 12px" }}>
+                  <div className="store-product-body" style={{ padding: "10px 12px" }}>
                     <div style={{ fontWeight: 700, fontSize: 13, color: "#111827", marginBottom: 2 }}>{product.name}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontWeight: 800, fontSize: 14, color: "#111827" }}>₹{product.discount_price || product.price}</span>

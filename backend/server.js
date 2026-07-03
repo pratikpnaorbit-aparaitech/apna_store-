@@ -227,6 +227,7 @@ const startServer = async () => {
     const productRoutes = require("./routes/productRoutes");
     const orderRoutes = require("./routes/ordersRoutes");
     const notificationRoutes = require("./routes/notificationRoutes");
+    const supportTicketRoutes = require("./routes/supportTicketRoutes");
 
     // Mount routes
     app.use("/api/auth", authRoutes);
@@ -246,6 +247,7 @@ const startServer = async () => {
     app.use("/api/products", productRoutes);
     app.use("/api/orders", orderRoutes);
     app.use("/api/notifications", notificationRoutes);
+    app.use("/api/support-tickets", supportTicketRoutes);
 
     /* ======================
        HEALTH CHECK

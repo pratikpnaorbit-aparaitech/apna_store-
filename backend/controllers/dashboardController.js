@@ -21,7 +21,7 @@ exports.getStats = async (req, res) => {
       todaySales,
       todayRevenue,
       totalOrders,
-      todayOrders
+      todayOrders,
     ] = await Promise.all([
       // Total products count
       Product.countDocuments({ is_active: 1, ...(storeId ? { storeId } : {}) }),
@@ -29,19 +29,19 @@ exports.getStats = async (req, res) => {
       // Total stock sum
       Product.aggregate([
         { $match: { is_active: 1, ...(storeId ? { storeId } : {}) } },
-        { $group: { _id: null, total: { $sum: "$stock" } } }
-      ]).then(result => result[0]?.total || 0),
+        { $group: { _id: null, total: { $sum: "$stock" } } },
+      ]).then((result) => result[0]?.total || 0),
 
       // Total revenue from successful transactions
       Transaction.aggregate([
         { $match: { status: "SUCCESS" } },
-        { $group: { _id: null, total: { $sum: "$total" } } }
-      ]).then(result => result[0]?.total || 0),
+        { $group: { _id: null, total: { $sum: "$total" } } },
+      ]).then((result) => result[0]?.total || 0),
 
       // Today's sales count
       Transaction.countDocuments({
         status: "SUCCESS",
-        created_at: { $gte: today, $lt: tomorrow }
+        created_at: { $gte: today, $lt: tomorrow },
       }),
 
       // Today's revenue
@@ -49,11 +49,11 @@ exports.getStats = async (req, res) => {
         {
           $match: {
             status: "SUCCESS",
-            created_at: { $gte: today, $lt: tomorrow }
-          }
+            created_at: { $gte: today, $lt: tomorrow },
+          },
         },
-        { $group: { _id: null, total: { $sum: "$total" } } }
-      ]).then(result => result[0]?.total || 0),
+        { $group: { _id: null, total: { $sum: "$total" } } },
+      ]).then((result) => result[0]?.total || 0),
 
       // Total online orders for this store
       Order.countDocuments({ ...(storeId ? { storeId } : {}) }),
@@ -61,8 +61,8 @@ exports.getStats = async (req, res) => {
       // Today's online orders
       Order.countDocuments({
         ...(storeId ? { storeId } : {}),
-        createdAt: { $gte: today, $lt: tomorrow }
-      })
+        createdAt: { $gte: today, $lt: tomorrow },
+      }),
     ]);
 
     const stats = {
@@ -72,7 +72,7 @@ exports.getStats = async (req, res) => {
       todaySales,
       todayRevenue,
       totalOrders,
-      todayOrders
+      todayOrders,
     };
 
     res.json({ success: true, stats });
@@ -95,25 +95,25 @@ exports.getWeeklyRevenue = async (req, res) => {
       {
         $match: {
           status: "SUCCESS",
-          created_at: { $gte: sixDaysAgo }
-        }
+          created_at: { $gte: sixDaysAgo },
+        },
       },
       {
         $group: {
           _id: {
-            day: { $dateToString: { format: "%Y-%m-%d", date: "$created_at" } }
+            day: { $dateToString: { format: "%Y-%m-%d", date: "$created_at" } },
           },
-          revenue: { $sum: "$total" }
-        }
+          revenue: { $sum: "$total" },
+        },
       },
       {
         $project: {
           _id: 0,
           day: "$_id.day",
-          revenue: 1
-        }
+          revenue: 1,
+        },
       },
-      { $sort: { day: 1 } }
+      { $sort: { day: 1 } },
     ]);
 
     res.json(weeklyRevenue);
@@ -132,16 +132,16 @@ exports.getPaymentChart = async (req, res) => {
       {
         $group: {
           _id: "$payment_mode",
-          count: { $sum: 1 }
-        }
+          count: { $sum: 1 },
+        },
       },
       {
         $project: {
           _id: 0,
           payment_mode: "$_id",
-          count: 1
-        }
-      }
+          count: 1,
+        },
+      },
     ]);
 
     res.json(paymentChart);
@@ -177,14 +177,14 @@ exports.getLowStock = async (req, res) => {
     const lowStockItems = await Product.find({
       is_active: 1,
       stock: { $lte: 5 },
-      ...(storeId ? { storeId } : {})
+      ...(storeId ? { storeId } : {}),
     })
       .select("id name sku stock")
       .sort({ stock: 1 });
 
     res.json({
       count: lowStockItems.length,
-      items: lowStockItems
+      items: lowStockItems,
     });
   } catch (err) {
     console.error("LOW STOCK ERROR:", err);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API } from "../../services/api";
 import {
@@ -17,6 +17,31 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [activeSheet, setActiveSheet] = useState(null);
   const [savedAddress, setSavedAddress] = useState(localStorage.getItem("savedAddress") || "");
+  const [ticketForm, setTicketForm] = useState({ subject: "", category: "order", orderNumber: "", description: "" });
+  const [tickets, setTickets] = useState([]);
+  const [ticketLoading, setTicketLoading] = useState(false);
+  const [ticketMessage, setTicketMessage] = useState("");
+
+  useEffect(() => {
+    if (activeSheet !== "support") return;
+    API.get("/support-tickets/mine")
+      .then(({ data }) => setTickets(data.tickets || []))
+      .catch(() => setTicketMessage("Could not load your previous tickets."));
+  }, [activeSheet]);
+
+  const submitTicket = async (event) => {
+    event.preventDefault();
+    setTicketLoading(true);
+    setTicketMessage("");
+    try {
+      const { data } = await API.post("/support-tickets", ticketForm);
+      setTickets((current) => [data.ticket, ...current]);
+      setTicketForm({ subject: "", category: "order", orderNumber: "", description: "" });
+      setTicketMessage(`Ticket ${data.ticket.ticketNumber} submitted successfully.`);
+    } catch (error) {
+      setTicketMessage(error.response?.data?.message || "Unable to submit ticket. Please try again.");
+    } finally { setTicketLoading(false); }
+  };
 
   const joinedDate = user.createdAt
     ? new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })
@@ -178,7 +203,22 @@ export default function ProfilePage() {
               : activeSheet === "payments" ? <p style={{ color:"#4b5563", lineHeight:1.7 }}>Pay securely using Razorpay UPI/cards or choose Cash on Delivery. Card and UPI details are never stored by SmartStore.</p>
               : activeSheet === "notifications" ? <p style={{ color:"#4b5563", lineHeight:1.7 }}>Order, payment and delivery updates appear in the notification bell on your shopping dashboard.</p>
               : activeSheet === "refunds" ? <><p style={{ color:"#4b5563" }}>Refund status is attached to the relevant order.</p><button onClick={() => navigate("/my-orders")} style={{ border:0, borderRadius:12, padding:"11px 16px", background:"#1a9c3e", color:"white", fontWeight:700, cursor:"pointer" }}>Open My Orders</button></>
-              : activeSheet === "support" ? <p style={{ color:"#4b5563", lineHeight:1.7 }}>For order help, quote the order number shown in My Orders and contact the store using the phone displayed on its page.</p>
+              : activeSheet === "support" ? <div>
+                  <p style={{ color:"#4b5563", lineHeight:1.6, marginTop:0 }}>Create a ticket and our support team will track it through resolution.</p>
+                  <form onSubmit={submitTicket}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                      <select value={ticketForm.category} onChange={(e) => setTicketForm({ ...ticketForm, category:e.target.value })} style={{ padding:12, border:"1.5px solid #e5e7eb", borderRadius:12, background:"white", fontFamily:"inherit" }}>
+                        <option value="order">Order</option><option value="payment">Payment</option><option value="refund">Refund</option><option value="delivery">Delivery</option><option value="account">Account</option><option value="other">Other</option>
+                      </select>
+                      <input value={ticketForm.orderNumber} onChange={(e) => setTicketForm({ ...ticketForm, orderNumber:e.target.value })} placeholder="Order number (optional)" style={{ padding:12, border:"1.5px solid #e5e7eb", borderRadius:12, fontFamily:"inherit", minWidth:0 }}/>
+                    </div>
+                    <input required minLength={5} maxLength={120} value={ticketForm.subject} onChange={(e) => setTicketForm({ ...ticketForm, subject:e.target.value })} placeholder="What do you need help with?" style={{ width:"100%", marginTop:10, padding:12, border:"1.5px solid #e5e7eb", borderRadius:12, boxSizing:"border-box", fontFamily:"inherit" }}/>
+                    <textarea required minLength={10} maxLength={2000} value={ticketForm.description} onChange={(e) => setTicketForm({ ...ticketForm, description:e.target.value })} placeholder="Describe the issue in detail" style={{ width:"100%", minHeight:100, marginTop:10, padding:12, border:"1.5px solid #e5e7eb", borderRadius:12, boxSizing:"border-box", fontFamily:"inherit", resize:"vertical" }}/>
+                    <button disabled={ticketLoading} style={{ width:"100%", marginTop:10, border:0, borderRadius:12, padding:13, background:ticketLoading ? "#86c995" : "#1a9c3e", color:"white", fontWeight:800, cursor:ticketLoading ? "wait" : "pointer" }}>{ticketLoading ? "Submitting..." : "Submit Support Ticket"}</button>
+                  </form>
+                  {ticketMessage && <div style={{ marginTop:10, padding:10, borderRadius:10, background:"#f0fdf4", color:"#166534", fontSize:13, fontWeight:600 }}>{ticketMessage}</div>}
+                  {tickets.length > 0 && <div style={{ marginTop:18 }}><strong style={{ fontSize:14 }}>Your tickets</strong>{tickets.map((ticket) => <div key={ticket._id} style={{ marginTop:9, padding:12, border:"1px solid #e5e7eb", borderRadius:12 }}><div style={{ display:"flex", justifyContent:"space-between", gap:8 }}><span style={{ fontWeight:800, fontSize:13 }}>{ticket.ticketNumber}</span><span style={{ textTransform:"capitalize", color:ticket.status === "resolved" ? "#15803d" : "#b45309", fontSize:12, fontWeight:800 }}>{ticket.status?.replace("_", " ")}</span></div><div style={{ marginTop:4, fontSize:13, color:"#374151" }}>{ticket.subject}</div>{ticket.adminReply && <div style={{ marginTop:7, padding:8, background:"#f3f4f6", borderRadius:8, fontSize:12, color:"#4b5563" }}><strong>Support:</strong> {ticket.adminReply}</div>}</div>)}</div>}
+                </div>
               : activeSheet === "invite" ? <><p style={{ color:"#4b5563" }}>Share SmartStore with friends.</p><button onClick={() => navigator.clipboard?.writeText(window.location.origin)} style={{ border:0, borderRadius:12, padding:"11px 16px", background:"#1a9c3e", color:"white", fontWeight:700, cursor:"pointer" }}>Copy Invite Link</button></>
               : <p style={{ color:"#4b5563", lineHeight:1.7 }}>SmartStore connects nearby stores, customers and delivery partners for fast local delivery. Version 1.0.0.</p>}
           </div>

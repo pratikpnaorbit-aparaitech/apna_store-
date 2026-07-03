@@ -137,6 +137,14 @@ function SuperAdminDashboard() {
             <h3 className="font-semibold">Inventory</h3>
             <p className="text-sm text-gray-500 mt-1">Manage products and stock</p>
           </Link>
+          <Link
+            to="/support-tickets"
+            className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition text-center"
+          >
+            <div className="text-4xl mb-3">🎧</div>
+            <h3 className="font-semibold">Support Tickets</h3>
+            <p className="text-sm text-gray-500 mt-1">Review and resolve customer issues</p>
+          </Link>
         </div>
 
         {/* Recent Users */}
