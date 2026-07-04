@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useParams } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 
 /* ================= PAGE IMPORTS ================= */
 
@@ -62,6 +62,7 @@ import Home from "./pages/Home"; // Public landing page
 import Sidebar from "./components/layout/Sidebar";
 import Topbar from "./components/layout/Topbar";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+import ChatBot from "./components/user/ChatBot";
 import "./assets/styles/thermal.css";
 
 /* =================================================
@@ -78,8 +79,15 @@ import "./assets/styles/thermal.css";
 ================================================= */
 
 function App() {
+  const { pathname } = useLocation();
+  const showUserChat = [
+    "/user-dashboard", "/browse-stores", "/checkout", "/my-orders",
+    "/profile", "/order-success", "/shop/", "/product/", "/category/",
+  ].some((path) => pathname === path || (path.endsWith("/") && pathname.startsWith(path)));
+
   return (
-    <Routes>
+    <>
+      <Routes>
 
       {/* ─────────────────────────────────────────
           PUBLIC ROUTES — no login required
@@ -305,7 +313,9 @@ function App() {
       ───────────────────────────────────────── */}
       <Route path="*" element={<Home />} />
 
-    </Routes>
+      </Routes>
+      {showUserChat && <ChatBot />}
+    </>
   );
 }
 

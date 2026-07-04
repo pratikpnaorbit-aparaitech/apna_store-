@@ -43,12 +43,12 @@ export default function UserDashboard() {
   const navigate    = useNavigate();
   const [stores, setStores]         = useState([]);
   const [categories, setCategories] = useState([]); // real categories from DB
-  const [products, setProducts]     = useState([]);
   const [cartOpen, setCartOpen]     = useState(false);
   const [cartCount, setCartCount]   = useState(0);
   const [location, setLocation]     = useState("Detecting...");
   const [search, setSearch]         = useState("");
   const [loading, setLoading]       = useState({ stores: true });
+  const [countdown, setCountdown]   = useState(3 * 3600 + 44 * 60 + 57);
   const [isMobile, setIsMobile]     = useState(window.innerWidth < 768);
   const searchRef = useRef();
 
@@ -57,6 +57,16 @@ export default function UserDashboard() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const formatCountdown = s => {
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+  };
 
   const loadCartCount = useCallback(() => {
     try { setCartCount(JSON.parse(localStorage.getItem("cart") || "[]").reduce((s, i) => s + (i.quantity || 0), 0)); }
@@ -85,17 +95,13 @@ export default function UserDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const [r, productResponse] = await Promise.all([
-          PUBLIC.get("/stores/public"),
-          PUBLIC.get("/inventory/public")
-        ]);
+        const r = await PUBLIC.get("/stores/public");
         const d = r.data;
         const storeList = Array.isArray(d) ? d : d?.stores || d?.data || [];
         setStores(storeList);
         // Extract unique real categories from stores
         const cats = [...new Set(storeList.flatMap(s => s.categories || []).filter(Boolean))];
         setCategories(cats);
-        setProducts((Array.isArray(productResponse.data) ? productResponse.data : productResponse.data?.products || []).slice(0, 8));
       } catch { setStores([]); }
       finally { setLoading(p => ({ ...p, stores: false })); }
     })();
@@ -112,18 +118,6 @@ export default function UserDashboard() {
 
   const handleSearch = e => {
     if (e.key === "Enter" && search.trim()) navigate(`/browse-stores?q=${encodeURIComponent(search.trim())}`);
-  };
-
-  const addDashboardProduct = (event, product) => {
-    event.stopPropagation();
-    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-    const existing = cart.find((item) => item._id === product._id);
-    const price = product.discount_price || product.price;
-    const next = existing
-      ? cart.map((item) => item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item)
-      : [...cart, { ...product, price, quantity: 1 }];
-    localStorage.setItem("cart", JSON.stringify(next));
-    window.dispatchEvent(new Event("cartUpdated"));
   };
 
   /* ── Shared blocks ── */
@@ -170,6 +164,9 @@ export default function UserDashboard() {
             </div>
             <span style={{ fontSize: 9, color: "#6b7280", fontWeight: 700, whiteSpace: "nowrap" }}>First order</span>
           </div>
+        </div>
+        <div style={{ marginTop: 8, fontWeight: 900, fontSize: isMobile ? 22 : 26, color: "#b45309", letterSpacing: "2px" }}>
+          {formatCountdown(countdown)}
         </div>
       </div>
       <div style={{ fontSize: isMobile ? 50 : 60, flexShrink: 0 }}>☕</div>
@@ -347,36 +344,227 @@ export default function UserDashboard() {
   }
 
   /* ══════════════ LAPTOP LAYOUT ══════════════ */
-  const cartItems = JSON.parse(localStorage.getItem("cart") || "[]");
-  const cartTotal = cartItems.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0);
-  const displayCategories = ["All", ...categories].slice(0, 9);
   return (
-    <div style={{fontFamily:"'DM Sans',sans-serif",background:"#f8faf8",minHeight:"100vh",color:"#17201a"}}>
+    <div style={{ fontFamily: "'DM Sans',sans-serif", background: "#f5f5f0", minHeight: "100vh" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-      <style>{`*{box-sizing:border-box}.dash-card{transition:.2s}.dash-card:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(21,78,37,.12)!important}.dash-scroll::-webkit-scrollbar{display:none}`}</style>
-      <header style={{height:86,background:"white",borderBottom:"1px solid #e8eee9",display:"flex",alignItems:"center",padding:"0 3%",gap:36,position:"sticky",top:0,zIndex:50}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,minWidth:210}}><div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,#188f3a,#086126)",display:"flex",alignItems:"center",justifyContent:"center"}}><IoFlash color="#ffd83d" size={23}/></div><strong style={{fontSize:24}}>SmartStore</strong></div>
-        <div style={{display:"flex",alignItems:"center",flex:1,maxWidth:760,border:"1px solid #dfe6e0",borderRadius:14,overflow:"hidden",background:"#fbfcfb"}}><FaSearch color="#9aa39c" style={{marginLeft:18}}/><input ref={searchRef} value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={handleSearch} placeholder='Search for "rice", "milk", "grocery"...' style={{flex:1,border:0,outline:0,padding:"15px",fontSize:15,background:"transparent"}}/><button onClick={()=>search.trim()&&navigate(`/browse-stores?q=${encodeURIComponent(search.trim())}`)} style={{border:0,background:"linear-gradient(135deg,#20a443,#0f7c30)",color:"white",fontWeight:800,fontSize:15,padding:"15px 32px",cursor:"pointer"}}>Search</button></div>
-        <button onClick={()=>setCartOpen(true)} style={{border:0,background:"transparent",display:"flex",alignItems:"center",gap:9,fontSize:16,fontWeight:700,cursor:"pointer",position:"relative"}}><FaShoppingCart size={20}/> Cart {cartCount>0&&<span style={{position:"absolute",top:-13,right:-12,background:"#15923a",color:"white",width:22,height:22,borderRadius:"50%",display:"grid",placeItems:"center",fontSize:11}}>{cartCount}</span>}</button>
-        <button onClick={()=>navigate("/profile")} style={{border:0,borderLeft:"1px solid #e6ebe7",background:"transparent",paddingLeft:28,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}><span style={{width:38,height:38,borderRadius:"50%",background:"#e5f4e8",display:"grid",placeItems:"center",fontWeight:900,color:"#15873a"}}>{getUserInitial()}</span><strong>Profile</strong><FaChevronDown size={11}/></button>
-      </header>
+      <style>{`
+        @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+        @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        @keyframes pulse2  { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+        .store-card:hover { transform:translateY(-4px); box-shadow:0 12px 28px rgba(0,0,0,0.13) !important; }
+        .prod-card:hover  { transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,0.1) !important; }
+        * { box-sizing:border-box; }
+      `}</style>
 
-      <div className="dash-scroll" style={{background:"white",padding:"18px 3% 15px",display:"flex",gap:24,overflowX:"auto",borderBottom:"1px solid #edf1ed"}}>{displayCategories.map((cat,index)=>{const meta=index===0?{emoji:"▦",bg:"#15923a"}:CATEGORY_EMOJI[cat]||{emoji:"🏷️",bg:"#f4f7f4"};return <button key={cat} onClick={()=>index===0?navigate("/browse-stores"):navigate(`/browse-stores?q=${encodeURIComponent(cat)}`)} style={{border:0,background:"transparent",minWidth:78,cursor:"pointer"}}><span style={{width:58,height:52,borderRadius:13,background:meta.bg,color:index===0?"white":"inherit",display:"grid",placeItems:"center",fontSize:25,margin:"0 auto 7px",boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>{meta.emoji}</span><span style={{fontSize:12,fontWeight:700}}>{cat}</span></button>})}</div>
+      {/* TOP NAVBAR */}
+      <div style={{ background: "#1a9c3e", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "14px 32px", display: "flex", alignItems: "center", gap: 20 }}>
+          {/* Brand */}
+          <div style={{ flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <IoFlash color="#facc15" size={24} />
+              <span style={{ fontWeight: 900, fontSize: 22, color: "white", letterSpacing: "-0.5px" }}>10 Minutes</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
+              <FaMapMarkerAlt color="rgba(255,255,255,0.8)" size={11} />
+              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", fontWeight: 500, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{location}</span>
+              <FaChevronDown color="rgba(255,255,255,0.8)" size={9} />
+            </div>
+          </div>
 
-      <div style={{padding:"28px 3% 40px",display:"grid",gridTemplateColumns:"minmax(0,1fr) 315px",gap:28,maxWidth:1700,margin:"0 auto"}}>
-        <main style={{minWidth:0}}>
-          <section style={{height:360,borderRadius:24,overflow:"hidden",position:"relative",background:"#f5f8f5 url('/smartstore-login-bg.png') center 62%/cover no-repeat",border:"1px solid #edf1ed"}}><div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(255,255,255,.96) 0%,rgba(255,255,255,.78) 40%,rgba(255,255,255,.05) 70%)"}}/><div style={{position:"relative",padding:"58px 48px",maxWidth:520}}><h1 style={{fontSize:38,lineHeight:1.25,margin:0,fontWeight:900,letterSpacing:"-1px"}}>Everything you need,<br/>delivered in 10 minutes</h1><p style={{fontSize:17,color:"#67716a",lineHeight:1.7,margin:"18px 0 28px"}}>Fresh products from your favorite stores near you in {location}.</p><button onClick={()=>navigate("/browse-stores")} style={{border:0,borderRadius:12,background:"linear-gradient(135deg,#1ca13f,#0d7a2d)",color:"white",fontWeight:800,padding:"14px 27px",fontSize:15,cursor:"pointer"}}>Shop Now &nbsp;→</button></div></section>
+          {/* Search */}
+          <div style={{ flex: 1, background: "white", borderRadius: 14, padding: "10px 18px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+            <FaSearch color="#9ca3af" size={16} />
+            <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} onKeyDown={handleSearch}
+              placeholder="Search stores or categories..."
+              style={{ flex: 1, border: "none", outline: "none", fontSize: 15, color: "#374151", background: "transparent", fontFamily: "'DM Sans',sans-serif", fontWeight: 500 }} />
+            {search && <button onClick={() => setSearch("")} style={{ background: "#f3f4f6", border: "none", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", color: "#6b7280" }}>✕</button>}
+          </div>
 
-          <section style={{marginTop:28}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h2 style={{fontSize:21,margin:0}}>Stores Near You</h2><button onClick={()=>navigate("/browse-stores")} style={{border:0,background:"transparent",color:"#178e39",fontWeight:800,cursor:"pointer"}}>View all →</button></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:18}}>{loading.stores?[1,2,3].map(i=><Skeleton key={i} h={220} r={18}/>):stores.slice(0,3).map(store=><article className="dash-card" key={store._id} onClick={()=>navigate(`/shop/${store._id}`)} style={{background:"white",border:"1px solid #e5ebe6",borderRadius:18,overflow:"hidden",cursor:"pointer",boxShadow:"0 4px 14px rgba(25,65,34,.05)"}}><div style={{height:125,background:"linear-gradient(135deg,#174e2a,#2e9150)",position:"relative",display:"grid",placeItems:"center",fontSize:44}}>{store.coverImage?<img src={store.coverImage} alt={store.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:"🏪"}<span style={{position:"absolute",top:10,left:10,background:"white",color:"#16883a",borderRadius:20,padding:"5px 8px",fontSize:11,fontWeight:900}}>24 min</span><span style={{position:"absolute",top:10,right:10,width:34,height:34,borderRadius:"50%",background:"white",display:"grid",placeItems:"center"}}>♡</span></div><div style={{padding:15}}><strong style={{fontSize:16}}>{store.name}</strong><div style={{margin:"7px 0",color:"#188f3a",fontSize:11,fontWeight:700}}>{(store.categories||[]).join(" • ")||"General Store"}</div><div style={{fontSize:12,color:"#6f786f"}}><FaStar color="#ffc928"/> 4.5 &nbsp; · &nbsp; <FaMapMarkerAlt color="#1b9a40"/> Nearby</div></div></article>)}</div></section>
+          {/* Right actions */}
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexShrink: 0 }}>
+            <div onClick={() => setCartOpen(true)} style={{ position: "relative", background: "rgba(255,255,255,0.15)", borderRadius: 12, padding: "8px 18px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", border: "1px solid rgba(255,255,255,0.2)", transition: "background 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.25)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.15)"}>
+              <FaShoppingCart color="white" size={18} />
+              <span style={{ color: "white", fontWeight: 700, fontSize: 14 }}>Cart</span>
+              {cartCount > 0 && <span style={{ background: "#ef4444", color: "white", fontSize: 11, fontWeight: 800, borderRadius: 20, padding: "1px 7px" }}>{cartCount}</span>}
+            </div>
+            <div onClick={() => navigate("/profile")} style={{ background: "rgba(255,255,255,0.2)", borderRadius: 12, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, cursor: "pointer", border: "1px solid rgba(255,255,255,0.2)", transition: "background 0.2s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.3)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.2)"}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, color: "white", fontSize: 14 }}>{getUserInitial()}</div>
+              <span style={{ color: "white", fontWeight: 600, fontSize: 14 }}>Profile</span>
+            </div>
+          </div>
+        </div>
 
-          {products.length>0&&<section style={{marginTop:30}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h2 style={{fontSize:21,margin:0}}>Featured Products</h2><button onClick={()=>navigate("/browse-stores")} style={{border:0,background:"transparent",color:"#178e39",fontWeight:800,cursor:"pointer"}}>View all →</button></div><div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:15}}>{products.slice(0,8).map(product=><article className="dash-card" key={product._id} onClick={()=>navigate(`/product/${product._id}`)} style={{background:"white",border:"1px solid #e5ebe6",borderRadius:16,overflow:"hidden",cursor:"pointer"}}><div style={{height:150,background:"#f7f9f7",display:"grid",placeItems:"center",position:"relative"}}>{product.image_url?<img src={product.image_url} alt={product.name} style={{width:"100%",height:"100%",objectFit:"contain"}}/>:<span style={{fontSize:48}}>📦</span>}{product.is_featured&&<span style={{position:"absolute",top:9,left:9,background:"#16933b",color:"white",fontSize:10,padding:"4px 8px",borderRadius:6,fontWeight:800}}>Bestseller</span>}</div><div style={{padding:13}}><strong style={{fontSize:13,display:"block",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{product.name}</strong><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}}><strong>₹{product.discount_price||product.price}</strong><button onClick={event=>addDashboardProduct(event,product)} style={{border:0,borderRadius:8,background:"#15923a",color:"white",fontWeight:800,padding:"7px 14px",cursor:"pointer"}}>+ Add</button></div></div></article>)}</div></section>}
-
-          <div style={{marginTop:30,display:"grid",gridTemplateColumns:"repeat(4,1fr)",background:"white",border:"1px solid #e5ebe6",borderRadius:18,padding:18}}>{[["⚡","10 Minute Delivery","Fast & reliable"],["🌿","Best Quality","Fresh & hygienic"],["🛡","Secure Payments","100% protected"],["↩","Easy Returns","No questions asked"]].map(([icon,title,sub])=><div key={title} style={{display:"flex",alignItems:"center",gap:12,padding:"0 18px"}}><span style={{width:42,height:42,borderRadius:"50%",background:"#ecf8ee",display:"grid",placeItems:"center",fontSize:20}}>{icon}</span><div><strong style={{fontSize:12}}>{title}</strong><div style={{fontSize:11,color:"#7a837c",marginTop:2}}>{sub}</div></div></div>)}</div>
-        </main>
-
-        <aside style={{display:"flex",flexDirection:"column",gap:24}}><section style={{background:"white",border:"1px solid #e4eae5",borderRadius:20,overflow:"hidden",boxShadow:"0 5px 18px rgba(20,70,31,.07)"}}><div style={{background:"linear-gradient(135deg,#1b9d3f,#0f7d2e)",color:"white",padding:"15px 18px",display:"flex",justifyContent:"space-between"}}><strong>Your Order</strong><span onClick={()=>setCartOpen(true)} style={{fontSize:12,cursor:"pointer"}}>View all →</span></div><div style={{padding:"14px 18px",color:"#188d39",fontWeight:800,borderBottom:"1px solid #edf1ed"}}>⚡ Delivery in 10 minutes</div><div style={{padding:16}}>{cartItems.length===0?<div style={{textAlign:"center",padding:"30px 10px",color:"#879087"}}><div style={{fontSize:38}}>🛒</div><div style={{fontWeight:700,marginTop:8}}>Your cart is empty</div></div>:cartItems.slice(0,4).map(item=><div key={item._id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f0f2f0"}}><div style={{width:42,height:42,borderRadius:8,background:"#f5f7f5",display:"grid",placeItems:"center",overflow:"hidden"}}>{item.image_url?<img src={item.image_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:"📦"}</div><div style={{flex:1}}><strong style={{fontSize:12}}>{item.name}</strong><div style={{fontWeight:800,fontSize:13,marginTop:3}}>₹{item.price}</div></div><span style={{border:"1px solid #dfe6e0",borderRadius:8,padding:"5px 9px",fontSize:12}}>× {item.quantity}</span></div>)}<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14}}><div><div style={{fontSize:11,color:"#7b847c"}}>Total</div><strong style={{color:"#168c38",fontSize:19}}>₹{cartTotal.toFixed(0)}</strong></div><button onClick={()=>navigate("/checkout")} disabled={!cartItems.length} style={{border:0,borderRadius:10,background:cartItems.length?"#15923a":"#cbd5cc",color:"white",fontWeight:800,padding:"12px 24px",cursor:cartItems.length?"pointer":"default"}}>Checkout</button></div></div></section><section style={{minHeight:210,borderRadius:20,padding:26,background:"linear-gradient(135deg,#fff5bd,#ffd86b)",position:"relative",overflow:"hidden"}}><h3 style={{fontSize:25,margin:"8px 0"}}>50% OFF</h3><strong>On First Order</strong><div style={{marginTop:25}}>Use code: <b style={{color:"#15873a"}}>TRY50</b></div><div style={{position:"absolute",right:18,bottom:10,fontSize:72}}>🏷️</div></section><section style={{borderRadius:20,padding:24,background:"linear-gradient(135deg,#f4fbf4,#eaf5e9)"}}><h3 style={{color:"#168b38",margin:"0 0 12px"}}>Today's Best Deal</h3><div style={{fontWeight:900,fontSize:20,letterSpacing:4}}>02 : 24 : 36</div><p style={{fontWeight:800,marginTop:24}}>Fresh deals near you</p><button onClick={()=>navigate("/browse-stores")} style={{border:0,borderRadius:9,background:"#15923a",color:"white",fontWeight:800,padding:"10px 18px",cursor:"pointer"}}>Shop Now</button></section></aside>
+        {/* Marquee */}
+        <div style={{ background: "rgba(0,0,0,0.15)", borderTop: "1px solid rgba(255,255,255,0.1)", overflow: "hidden", padding: "6px 0" }}>
+          <div style={{ display: "flex", animation: "marquee 24s linear infinite", width: "max-content" }}>
+            {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, i) => (
+              <span key={i} style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.9)", paddingRight: 40, whiteSpace: "nowrap" }}>{item}</span>
+            ))}
+          </div>
+        </div>
       </div>
-      <CartDrawer isOpen={cartOpen} onClose={()=>setCartOpen(false)}/>
+
+      {/* MAIN: sidebar + content */}
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "28px 32px", display: "grid", gridTemplateColumns: "240px 1fr", gap: 28 }}>
+
+        {/* ── LEFT SIDEBAR ── stores + deals, NO category list */}
+        <aside style={{ position: "sticky", top: 110, height: "fit-content", display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Stores quick access */}
+          <div style={{ background: "white", borderRadius: 20, overflow: "hidden", boxShadow: "0 2px 16px rgba(0,0,0,0.07)" }}>
+            <div style={{ background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: "white" }}>Stores</div>
+              <span onClick={() => navigate("/browse-stores")} style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", cursor: "pointer", fontWeight: 600 }}>View all</span>
+            </div>
+            {loading.stores ? [1,2,3].map(i => (
+              <div key={i} style={{ padding: "12px 18px", borderBottom: "1px solid #f5f5f5", display: "flex", alignItems: "center", gap: 10 }}>
+                <Skeleton w={36} h={36} r={10} />
+                <div style={{ flex: 1 }}><Skeleton w="70%" h={12} /><div style={{ marginTop: 6 }}><Skeleton w="50%" h={10} /></div></div>
+              </div>
+            )) : stores.map((store, i) => (
+              <div key={store._id} onClick={() => navigate(`/shop/${store._id}`)}
+                style={{ padding: "12px 18px", borderBottom: i < stores.length - 1 ? "1px solid #f5f5f5" : "none", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", transition: "background 0.18s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#f0fdf4"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, overflow: "hidden", background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🏪"}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{store.name}</div>
+                  <div style={{ fontSize: 11, color: "#1a9c3e", fontWeight: 600, marginTop: 2 }}>{(store.categories || []).join(", ")}</div>
+                </div>
+                <FaArrowRight size={10} color="#d1d5db" />
+              </div>
+            ))}
+          </div>
+
+          {/* Offer card */}
+          <div style={{ background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", borderRadius: 20, padding: "20px 18px", textAlign: "center", boxShadow: "0 4px 20px rgba(26,156,62,0.25)" }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🎁</div>
+            <div style={{ fontWeight: 900, fontSize: 20, color: "#facc15", letterSpacing: "-0.3px" }}>50% OFF</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "white", marginTop: 4 }}>Use code TRY50</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", marginTop: 4 }}>Min order ₹99 • Free delivery</div>
+            <div style={{ marginTop: 14, background: "white", borderRadius: 50, padding: "8px 16px" }}>
+              <span style={{ fontWeight: 800, fontSize: 13, color: "#1a9c3e" }}>TRY50</span>
+            </div>
+          </div>
+
+          {/* Trust badges */}
+          <div style={{ background: "white", borderRadius: 20, padding: "16px 18px", boxShadow: "0 2px 16px rgba(0,0,0,0.07)" }}>
+            {[
+              { emoji: "⚡", label: "10 Min Delivery", sub: "Super fast" },
+              { emoji: "🔒", label: "Secure Payment", sub: "100% safe" },
+              { emoji: "↩️", label: "Easy Returns",   sub: "No hassle" },
+            ].map((b, i) => (
+              <div key={b.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < 2 ? "1px solid #f5f5f5" : "none" }}>
+                <div style={{ fontSize: 22, width: 36, textAlign: "center", flexShrink: 0 }}>{b.emoji}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{b.label}</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af" }}>{b.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* ── RIGHT CONTENT ── */}
+        <main style={{ minWidth: 0 }}>
+
+          {/* Promo */}
+          <div style={{ marginBottom: 20 }}><PromoBanner /></div>
+
+          {/* Welcome gift */}
+          <div style={{ marginBottom: 24 }}><WelcomeGift /></div>
+
+          {/* Real categories — pill row */}
+          {categories.length > 0 && (
+            <section style={{ marginBottom: 28 }}>
+              <div style={{ fontWeight: 900, fontSize: 20, color: "#111827", marginBottom: 14 }}>Shop by Category</div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                {categories.map(cat => {
+                  const meta = CATEGORY_EMOJI[cat] || { emoji: "🏷️", bg: "#f3f4f6" };
+                  return (
+                    <div key={cat} onClick={() => navigate(`/browse-stores?q=${encodeURIComponent(cat)}`)}
+                      style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "2px solid #e5e7eb", borderRadius: 50, padding: "10px 20px 10px 12px", cursor: "pointer", transition: "all 0.18s", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "#1a9c3e"; e.currentTarget.style.background = "#f0fdf4"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "white"; }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: meta.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{meta.emoji}</div>
+                      <span style={{ fontWeight: 700, fontSize: 14, color: "#374151" }}>{cat}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Stores grid */}
+          <section style={{ marginBottom: 32 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 20, color: "#111827" }}>Stores Near You</div>
+                <div style={{ fontSize: 13, color: "#f59e0b", fontWeight: 700, marginTop: 2, display: "flex", alignItems: "center", gap: 5 }}>
+                  <FaFire size={11} /> Trending • Fast delivery
+                </div>
+              </div>
+              <span onClick={() => navigate("/browse-stores")} style={{ color: "#1a9c3e", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                View all <FaArrowRight size={10} />
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 16 }}>
+              {loading.stores ? [1,2,3].map(i => (
+                <div key={i} style={{ background: "white", borderRadius: 20, overflow: "hidden" }}>
+                  <Skeleton w="100%" h={110} r={0} />
+                  <div style={{ padding: 14 }}><Skeleton w="70%" h={14} /><div style={{ marginTop: 8 }}><Skeleton w="50%" h={11} /></div></div>
+                </div>
+              )) : stores.map(store => (
+                <div key={store._id} className="store-card" onClick={() => navigate(`/shop/${store._id}`)}
+                  style={{ background: "white", borderRadius: 20, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.07)", cursor: "pointer", transition: "all 0.25s" }}>
+                  <div style={{ height: 110, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44, position: "relative" }}>
+                    {store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🏪"}
+                    <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(6px)", padding: "3px 9px", borderRadius: 20, fontSize: 10, color: "white", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                      <FaClock size={9} /> 15 min
+                    </div>
+                  </div>
+                  <div style={{ padding: "14px 16px" }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: "#111827", marginBottom: 6 }}>{store.name}</div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+                      {(store.categories || []).map(c => (
+                        <span key={c} style={{ background: "#e8f5e9", color: "#1a9c3e", fontSize: 10, fontWeight: 700, padding: "2px 9px", borderRadius: 20 }}>{c}</span>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <FaStar color="#facc15" size={12} />
+                      <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 600 }}>4.5 • 15 min</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+        </main>
+      </div>
+
+      {/* Bottom offer bar */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "white", borderTop: "1px solid #e5e7eb", padding: "12px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 40, boxShadow: "0 -4px 24px rgba(0,0,0,0.08)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 42, height: 42, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(26,156,62,0.3)" }}>
+            <FaPercent color="white" size={18} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: "#1a9c3e" }}>FLAT 50% OFF + FREE DELIVERY</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 1 }}>Use code: TRY50 • Min order ₹99</div>
+          </div>
+        </div>
+        <div style={{ background: "#f0fdf4", border: "1.5px solid #bbf7d0", padding: "8px 20px", borderRadius: 50, fontSize: 13, fontWeight: 700, color: "#1a9c3e", cursor: "pointer" }}>
+          Apply Code
+        </div>
+      </div>
+
+      <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} />
     </div>
   );
 }
