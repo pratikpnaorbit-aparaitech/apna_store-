@@ -257,6 +257,49 @@ router.post("/login", async (req, res) => {
   }
 });
 
+/* ================= MOBILE APP EMAIL REGISTRATION ================= */
+
+router.post("/register-app", async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || "");
+
+    if (name.length < 2) {
+      return res.status(400).json({ success: false, message: "Please enter your full name" });
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      return res.status(400).json({ success: false, message: "Please enter a valid email" });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
+    }
+    if (await User.exists({ email })) {
+      return res.status(409).json({ success: false, message: "An account with this email already exists" });
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      password: await bcrypt.hash(password, 10),
+      role: "user",
+      isEmailVerified: false,
+      isActive: true,
+    });
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    res.status(201).json({
+      success: true,
+      message: "Account created successfully",
+      token,
+      user: formatUser(user),
+    });
+  } catch (error) {
+    console.error("APP REGISTRATION ERROR:", error.message);
+    res.status(500).json({ success: false, message: "Registration failed. Please try again." });
+  }
+});
+
 /* ================= GET CURRENT USER ================= */
 
 router.get("/me", verifyToken, async (req, res) => {

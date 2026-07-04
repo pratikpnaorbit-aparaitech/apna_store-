@@ -39,6 +39,10 @@ async function buildOrderPayload(body, userId) {
   const itemsTotal = Number(items.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2));
   const deliveryCharge = 40;
   const gst = Number((itemsTotal * 0.05).toFixed(2));
+  const couponCode = String(body.couponCode || "").trim().toUpperCase();
+  const discount = couponCode === "TRY50" && itemsTotal >= 99
+    ? Number(Math.min(itemsTotal * 0.5, 150).toFixed(2))
+    : 0;
   return {
     userId,
     storeId: body.storeId || products[0]?.storeId || null,
@@ -47,7 +51,9 @@ async function buildOrderPayload(body, userId) {
     itemsTotal,
     deliveryCharge,
     gst,
-    totalAmount: Number((itemsTotal + deliveryCharge + gst).toFixed(2)),
+    discount,
+    couponCode: discount ? couponCode : null,
+    totalAmount: Number((itemsTotal + deliveryCharge + gst - discount).toFixed(2)),
     customerLocation: body.customerLocation,
   };
 }

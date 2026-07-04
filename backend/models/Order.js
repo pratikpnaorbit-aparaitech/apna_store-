@@ -49,6 +49,8 @@ const OrderSchema = new mongoose.Schema({
   itemsTotal: Number,
   deliveryCharge: Number,
   gst: Number,
+  discount: { type: Number, default: 0 },
+  couponCode: { type: String, default: null },
   totalAmount: Number,
   customerLocation: {
     latitude: { type: Number, min: -90, max: 90 },

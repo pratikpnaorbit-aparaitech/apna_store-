@@ -1,6 +1,7 @@
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const express = require("express");
+const cors = require("cors");
 const path = require("path");
 const mongoose = require("mongoose");
 const fs = require("fs");
@@ -74,13 +75,11 @@ const smsLimiter = rateLimit({
 ====================== */
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ['http://localhost:5173', 'http://localhost:3000'];
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8081', 'http://localhost:19006', 'http://192.168.1.23:8081', 'http://192.168.1.23:19006', 'http://192.168.1.23:8081', 'http://192.168.1.23:19006'];
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
+  res.setHeader("Access-Control-Allow-Origin", origin || "*");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Origin, X-Requested-With, Content-Type, Accept, Authorization"
@@ -132,6 +131,7 @@ app.use('/api/delivery-partners/:id/location', pollingLimiter);
 app.use('/api', limiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/register-app', authLimiter);
 
 // Only apply SMS rate limiters if routes exist
 if (fs.existsSync(path.join(__dirname, 'routes', 'smsRoutes.js'))) {
