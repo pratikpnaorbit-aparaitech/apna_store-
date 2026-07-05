@@ -6,6 +6,7 @@ const allowRole = require("../middleware/roleMiddleware");
 const Store = require("../models/Store");
 const User = require("../models/User");
 const Product = require("../models/Product");
+const upload = require("../middleware/uploadMiddleware");
 
 // Pull helpers from the model file (no separate util file needed)
 const { detectStoreType, STORE_TYPES } = Store;
@@ -114,10 +115,31 @@ router.get("/my-store", verifyToken, allowRole(["admin"]), async (req, res) => {
     const user = await User.findById(req.user.id).select("storeId");
     if (!user?.storeId) return res.json({ success: true, data: null });
 
-    const store = await Store.findById(user.storeId).select("name categories storeType");
+    const store = await Store.findById(user.storeId).select("name categories storeType image_url cover_image_url");
     res.json({ success: true, data: store });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to fetch store" });
+  }
+});
+
+// @desc  Let a store admin upload or replace their own storefront cover
+// @route POST /api/stores/my-store/cover
+router.post("/my-store/cover", verifyToken, allowRole(["admin"]), upload.single("cover"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: "Please select an image" });
+    const user = await User.findById(req.user.id).select("storeId");
+    if (!user?.storeId) return res.status(404).json({ success: false, message: "No store is assigned to this account" });
+
+    const coverImageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+    const store = await Store.findByIdAndUpdate(
+      user.storeId,
+      { cover_image_url: coverImageUrl },
+      { returnDocument: "after", runValidators: true }
+    ).select("name categories storeType image_url cover_image_url");
+    if (!store) return res.status(404).json({ success: false, message: "Store not found" });
+    res.json({ success: true, message: "Store cover updated", data: store, coverImage: coverImageUrl });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to update store cover" });
   }
 });
 

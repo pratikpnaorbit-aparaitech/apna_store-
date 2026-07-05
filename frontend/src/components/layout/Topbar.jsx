@@ -53,13 +53,13 @@ function Topbar() {
           </div>
         </button>
 
-        {/* {showProfile && (
+        {showProfile && (
           <AdminProfile
             admin={user}
             onClose={() => setShowProfile(false)}
             onLogout={handleLogout}
           />
-        )} */}
+        )}
       </div>
 
     </div>

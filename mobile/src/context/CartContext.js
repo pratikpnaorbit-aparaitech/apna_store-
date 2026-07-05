@@ -6,8 +6,12 @@ const KEY = "smartstore_cart_v1";
 
 export function CartProvider({ children }) {
   const [items, setItems] = useState([]);
+  const [ready, setReady] = useState(false);
 
-  useEffect(() => { AsyncStorage.getItem(KEY).then((value) => value && setItems(JSON.parse(value))).catch(() => {}); }, []);
+  useEffect(() => { AsyncStorage.getItem(KEY).then((value) => {
+    const saved = value ? JSON.parse(value) : [];
+    setItems(Array.isArray(saved) ? saved : []);
+  }).catch(() => setItems([])).finally(() => setReady(true)); }, []);
 
   const commit = (next) => {
     setItems(next);
@@ -26,7 +30,7 @@ export function CartProvider({ children }) {
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce((sum, item) => sum + Number(item.discount_price ?? item.price) * item.quantity, 0);
 
-  const value = useMemo(() => ({ items, count, subtotal, add, change, clear }), [items, count, subtotal]);
+  const value = useMemo(() => ({ items, count, subtotal, ready, add, change, clear }), [items, count, subtotal, ready]);
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 

@@ -3,13 +3,14 @@ const User = require("../models/User");
 
 /* ── helpers ── */
 function calcExpiry(p) {
-  const today = new Date(); 
+  const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const sevenDays = new Date(today); 
+  const sevenDays = new Date(today);
   sevenDays.setDate(sevenDays.getDate() + 7);
 
-  let expiryStatus = "SAFE", discountPercent = 0;
+  let expiryStatus = "SAFE",
+    discountPercent = 0;
 
   if (p.expiry_date) {
     const exp = new Date(p.expiry_date);
@@ -17,8 +18,7 @@ function calcExpiry(p) {
 
     if (exp < today) {
       expiryStatus = "EXPIRED";
-    } 
-    else if (exp <= sevenDays) {
+    } else if (exp <= sevenDays) {
       expiryStatus = "NEAR_EXPIRY";
       discountPercent = 15;
     }
@@ -46,7 +46,7 @@ function normalize(p) {
     image: p.image || null,
     expiryStatus,
     discountPercent,
-    isLowStock: Number(p.stock) <= (p.reorder_level ?? 5)
+    isLowStock: Number(p.stock) <= (p.reorder_level ?? 5),
   };
 }
 
@@ -67,8 +67,7 @@ exports.getAllProducts = async (req, res) => {
       }
 
       query.storeId = user.storeId;
-    } 
-    else if (role === "super_admin") {
+    } else if (role === "super_admin") {
       if (req.query.storeId) {
         query.storeId = req.query.storeId;
       }
@@ -80,23 +79,20 @@ exports.getAllProducts = async (req, res) => {
       .sort({ created_at: -1 });
 
     res.json(products.map(normalize));
-
   } catch (err) {
     console.error("FETCH INVENTORY ERROR:", err);
     res.status(500).json({ message: "Failed to fetch inventory" });
   }
 };
 
-
 /* =========================
    GET SINGLE PRODUCT
 ========================= */
 exports.getProductById = async (req, res) => {
   try {
-
     const product = await Product.findOne({
       _id: req.params.id,
-      is_active: 1
+      is_active: 1,
     });
 
     if (!product) {
@@ -104,7 +100,6 @@ exports.getProductById = async (req, res) => {
     }
 
     res.json(normalize(product));
-
   } catch (err) {
     console.error("FETCH PRODUCT ERROR:", err);
 
@@ -116,12 +111,10 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-
 /* =========================
    ADD PRODUCT
 ========================= */
 exports.addProduct = async (req, res) => {
-
   const {
     name,
     sku,
@@ -131,7 +124,7 @@ exports.addProduct = async (req, res) => {
     stock,
     reorder_level,
     expiryDate,
-    is_featured
+    is_featured,
   } = req.body;
 
   if (!name || !sku || !category || price == null || stock == null) {
@@ -139,12 +132,11 @@ exports.addProduct = async (req, res) => {
   }
 
   try {
-
     const existingProduct = await Product.findOne({ sku });
 
     if (existingProduct) {
       return res.status(400).json({
-        message: "Product with this SKU already exists"
+        message: "Product with this SKU already exists",
       });
     }
 
@@ -153,67 +145,58 @@ exports.addProduct = async (req, res) => {
     const storeId = user?.storeId || null;
 
     const newProduct = await Product.create({
+      name,
+      sku,
+      category,
 
-  name,
-  sku,
-  category,
+      price: Number(price),
 
-  price: Number(price),
+      discount_price: discount_price ? Number(discount_price) : null,
 
-  discount_price: discount_price
-    ? Number(discount_price)
-    : null,
+      stock: Number(stock),
 
-  stock: Number(stock),
+      reorder_level: reorder_level ? Number(reorder_level) : 5,
 
-  reorder_level: reorder_level
-    ? Number(reorder_level)
-    : 5,
+      expiry_date: expiryDate || null,
 
-  expiry_date: expiryDate || null,
+      is_featured: is_featured || false,
 
-  is_featured: is_featured || false,
+      is_active: 1,
 
-  is_active: 1,
+      storeId,
 
-  storeId,
+      createdBy: req.user.id,
 
-  createdBy: req.user.id,
-
-  image: req.file
-    ? req.file.filename
-    : req.body.image_url
-      ? req.body.image_url.replace("http://localhost:5000/uploads/", "")
-      : null
-});
+      image: req.file
+        ? req.file.filename
+        : req.body.image_url
+          ? req.body.image_url.replace("http://localhost:5000/uploads/", "")
+          : null,
+    });
 
     res.json({
       success: true,
-      id: newProduct._id
+      id: newProduct._id,
     });
-
   } catch (err) {
-
     console.error("ADD PRODUCT ERROR:", err);
 
     if (err.name === "ValidationError") {
       return res.status(400).json({
-        message: err.message
+        message: err.message,
       });
     }
 
     res.status(500).json({
-      message: "Failed to add product"
+      message: "Failed to add product",
     });
   }
 };
-
 
 /* =========================
    UPDATE PRODUCT
 ========================= */
 exports.updateProduct = async (req, res) => {
-
   const {
     name,
     sku,
@@ -223,20 +206,19 @@ exports.updateProduct = async (req, res) => {
     stock,
     reorder_level,
     expiryDate,
-    is_featured
+    is_featured,
   } = req.body;
 
   try {
-
     if (sku) {
       const existing = await Product.findOne({
         sku,
-        _id: { $ne: req.params.id }
+        _id: { $ne: req.params.id },
       });
 
       if (existing) {
         return res.status(400).json({
-          message: "SKU already exists for another product"
+          message: "SKU already exists for another product",
         });
       }
     }
@@ -246,41 +228,34 @@ exports.updateProduct = async (req, res) => {
       sku,
       category,
       price: Number(price),
-      discount_price: discount_price
-        ? Number(discount_price)
-        : null,
+      discount_price: discount_price ? Number(discount_price) : null,
       stock: Number(stock),
-      reorder_level: reorder_level
-        ? Number(reorder_level)
-        : 5,
+      reorder_level: reorder_level ? Number(reorder_level) : 5,
       expiry_date: expiryDate || null,
-      is_featured: is_featured || false
+      is_featured: is_featured || false,
     };
 
     // Update image if new image uploaded
-   if (req.file) {
-  updateData.image = req.file.filename;
-} else if (req.body.image_url) {
-  updateData.image = req.body.image_url.replace(
-    "http://localhost:5000/uploads/",
-    ""
-  );
-}
+    if (req.file) {
+      updateData.image = req.file.filename;
+    } else if (req.body.image_url) {
+      updateData.image = req.body.image_url.replace(
+        "http://localhost:5000/uploads/",
+        "",
+      );
+    }
 
-    const updated = await Product.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { returnDocument: "after", runValidators: true }
-    );
+    const updated = await Product.findByIdAndUpdate(req.params.id, updateData, {
+      returnDocument: "after",
+      runValidators: true,
+    });
 
     if (!updated) {
       return res.status(404).json({ message: "Product not found" });
     }
 
     res.json({ success: true });
-
   } catch (err) {
-
     console.error("UPDATE PRODUCT ERROR:", err);
 
     if (err.name === "CastError") {
@@ -288,22 +263,20 @@ exports.updateProduct = async (req, res) => {
     }
 
     res.status(500).json({
-      message: "Failed to update product"
+      message: "Failed to update product",
     });
   }
 };
-
 
 /* =========================
    ARCHIVE PRODUCT
 ========================= */
 exports.archiveProduct = async (req, res) => {
   try {
-
     const product = await Product.findByIdAndUpdate(
       req.params.id,
       { is_active: 0 },
-      { returnDocument: "after" }
+      { returnDocument: "after" },
     );
 
     if (!product) {
@@ -311,9 +284,7 @@ exports.archiveProduct = async (req, res) => {
     }
 
     res.json({ success: true });
-
   } catch (err) {
-
     console.error("ARCHIVE PRODUCT ERROR:", err);
 
     if (err.name === "CastError") {
@@ -321,7 +292,7 @@ exports.archiveProduct = async (req, res) => {
     }
 
     res.status(500).json({
-      message: "Failed to archive product"
+      message: "Failed to archive product",
     });
   }
 };

@@ -145,8 +145,8 @@ export default function ProfilePage() {
 
       {/* EDIT MODAL */}
       {showEdit && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
-          <div style={{ background: "white", borderRadius: "20px 20px 0 0", padding: "24px 20px", width: "100%", maxWidth: 480 }}>
+        <div onClick={() => setShowEdit(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
+          <div onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Edit profile" style={{ background: "white", borderRadius: 20, padding: "24px 20px", width: "100%", maxWidth: 480, maxHeight: "calc(100vh - 32px)", overflowY: "auto", boxShadow: "0 24px 70px rgba(0,0,0,.28)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <span style={{ fontWeight: 800, fontSize: 18 }}>Edit Profile</span>
               <button onClick={() => setShowEdit(false)} style={{ background: "#f5f5f5", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 16 }}>✕</button>
@@ -170,8 +170,8 @@ export default function ProfilePage() {
       )}
 
       {activeSheet && (
-        <div onClick={() => setActiveSheet(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 110, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div onClick={(event) => event.stopPropagation()} style={{ width: "100%", maxWidth: 520, background: "white", borderRadius: "24px 24px 0 0", padding: 24, maxHeight: "75vh", overflowY: "auto" }}>
+        <div onClick={() => setActiveSheet(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: 520, background: "white", borderRadius: 24, padding: 24, maxHeight: "calc(100vh - 32px)", overflowY: "auto", boxShadow: "0 24px 70px rgba(0,0,0,.28)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><strong style={{ fontSize: 19 }}>{({ refunds:"My Refunds", support:"Help & Support", offers:"Offers & Benefits", address:"Saved Address", payments:"Payment Methods", notifications:"Notifications", about:"About SmartStore", invite:"Invite & Earn" })[activeSheet]}</strong><button onClick={() => setActiveSheet(null)} style={{ border: 0, borderRadius: "50%", width: 34, height: 34, cursor: "pointer" }}>✕</button></div>
             {activeSheet === "address" ? <><textarea value={savedAddress} onChange={(event) => setSavedAddress(event.target.value)} placeholder="House number, street, area, city and pincode" style={{ width:"100%", minHeight:110, border:"1.5px solid #e5e7eb", borderRadius:14, padding:14, boxSizing:"border-box", fontFamily:"inherit" }}/><button onClick={() => { localStorage.setItem("savedAddress", savedAddress); setActiveSheet(null); }} style={{ width:"100%", marginTop:12, border:0, borderRadius:14, padding:13, background:"#1a9c3e", color:"white", fontWeight:800, cursor:"pointer" }}>Save Address</button></>
               : activeSheet === "offers" ? <p style={{ color:"#4b5563", lineHeight:1.7 }}>Use <strong>TRY50</strong> on eligible first orders. Available offers are shown automatically at checkout.</p>

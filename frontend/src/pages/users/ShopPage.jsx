@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { FaArrowLeft, FaSearch, FaMapMarkerAlt, FaPhone } from "react-icons/fa";
+import groceryStoreHero from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
 
 const PUBLIC = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api" });
 
@@ -17,6 +18,8 @@ const formatAddress = (address) => {
 export default function ShopPage() {
   const { storeId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectedProductId = searchParams.get("product");
   const [store, setStore] = useState(null);
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState(JSON.parse(localStorage.getItem("cart") || "[]"));
@@ -76,7 +79,7 @@ export default function ShopPage() {
     const matchCat = categoryFilter === "All" || p.category === categoryFilter;
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
-  });
+  }).sort((a, b) => Number(String(b._id) === selectedProductId) - Number(String(a._id) === selectedProductId));
   const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
@@ -93,9 +96,9 @@ export default function ShopPage() {
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* HERO */}
-      <div style={{ position: "relative", height: 220, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", overflow: "hidden" }}>
-        {store?.coverImage && <img src={store.coverImage} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
-        {store?.coverImage && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top,rgba(0,0,0,.75),rgba(0,0,0,.12))" }} />}
+      <div style={{ position: "relative", height: "clamp(240px, 31vw, 360px)", background: "#0d5c24", overflow: "hidden" }}>
+        <img src={store?.coverImage || groceryStoreHero} alt={`${store?.name || "Store"} cover`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 45%" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg,rgba(4,35,15,.88) 0%,rgba(4,35,15,.42) 48%,rgba(4,35,15,.16) 100%), linear-gradient(to top,rgba(0,0,0,.72),transparent 65%)" }} />
         <button onClick={() => navigate(-1)} style={{ position: "absolute", top: 16, left: 16, zIndex: 10, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <FaArrowLeft color="white" size={15} />
         </button>
@@ -167,9 +170,9 @@ export default function ShopPage() {
             {filtered.map(product => {
               const qty = getQty(product._id);
               return (
-                <div key={product._id}
+                <div key={product._id} id={`product-${product._id}`}
                   onClick={() => navigate(`/product/${product._id}`)}
-                  style={{ background: "white", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.07)", cursor: "pointer" }}>
+                  style={{ background: "white", borderRadius: 16, overflow: "hidden", boxShadow: String(product._id) === selectedProductId ? "0 0 0 3px #1a9c3e, 0 4px 18px rgba(26,156,62,.24)" : "0 2px 12px rgba(0,0,0,0.07)", cursor: "pointer" }}>
                   <div style={{ position: "relative", height: 130, background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {product.image_url
                       ? <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />

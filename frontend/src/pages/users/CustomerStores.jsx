@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Clock, MapPin, Search, Star, Store } from "lucide-react";
 import { API } from "../../services/api";
+import defaultStoreCover from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
 
 const addressText = (address) => [address?.street, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ");
 
@@ -37,7 +38,7 @@ export default function CustomerStores() {
         : error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700">{error}</div>
         : filtered.length === 0 ? <div className="rounded-3xl bg-white p-12 text-center"><Store className="mx-auto mb-3 text-slate-300" size={42}/><h2 className="font-bold">No matching stores</h2><p className="mt-1 text-sm text-slate-500">Try another name, category, or location.</p></div>
         : <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{filtered.map((store) => <button key={store._id} onClick={() => navigate(`/shop/${store._id}`)} className="overflow-hidden rounded-3xl border border-slate-100 bg-white text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
-          <div className="relative h-44 bg-gradient-to-br from-green-600 to-green-800">{store.coverImage ? <img src={store.coverImage} alt="" className="h-full w-full object-cover"/> : <div className="flex h-full items-center justify-center text-6xl">🏪</div>}<div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"/><span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white"><Clock size={12}/> 15 min</span><h2 className="absolute bottom-3 left-4 right-4 text-xl font-black text-white">{store.name}</h2></div>
+          <div className="relative h-44 bg-gradient-to-br from-green-600 to-green-800"><img src={store.coverImage || defaultStoreCover} alt={`${store.name} cover`} className="h-full w-full object-cover"/><div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"/><span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-3 py-1 text-xs font-bold text-white"><Clock size={12}/> 15 min</span><h2 className="absolute bottom-3 left-4 right-4 text-xl font-black text-white">{store.name}</h2></div>
           <div className="p-4"><div className="mb-3 flex flex-wrap gap-1.5">{(store.categories || []).slice(0,3).map((category) => <span key={category} className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700">{category}</span>)}</div><div className="flex items-center gap-2 text-sm text-slate-500"><Star size={14} className="fill-amber-400 text-amber-400"/><span className="font-semibold">4.5</span><span>•</span><span>Fast delivery</span></div>{addressText(store.address) && <div className="mt-2 flex items-start gap-2 text-xs text-slate-500"><MapPin size={13} className="mt-0.5 shrink-0"/><span className="line-clamp-2">{addressText(store.address)}</span></div>}</div>
         </button>)}</div>}
     </section>

@@ -8,6 +8,7 @@ import {
 } from "react-icons/fa";
 import { IoFlash } from "react-icons/io5";
 import CartDrawer from "../../components/user/CartDrawer";
+import defaultStoreCover from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
 
 const PUBLIC = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api" });
 
@@ -42,12 +43,13 @@ const Skeleton = ({ w = "100%", h = 16, r = 8 }) => (
 export default function UserDashboard() {
   const navigate    = useNavigate();
   const [stores, setStores]         = useState([]);
+  const [products, setProducts]     = useState([]);
   const [categories, setCategories] = useState([]); // real categories from DB
   const [cartOpen, setCartOpen]     = useState(false);
   const [cartCount, setCartCount]   = useState(0);
   const [location, setLocation]     = useState("Detecting...");
   const [search, setSearch]         = useState("");
-  const [loading, setLoading]       = useState({ stores: true });
+  const [loading, setLoading]       = useState({ stores: true, products: true });
   const [countdown, setCountdown]   = useState(3 * 3600 + 44 * 60 + 57);
   const [isMobile, setIsMobile]     = useState(window.innerWidth < 768);
   const searchRef = useRef();
@@ -95,15 +97,20 @@ export default function UserDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await PUBLIC.get("/stores/public");
-        const d = r.data;
+        const [storeResponse, productResponse] = await Promise.all([
+          PUBLIC.get("/stores/public"),
+          PUBLIC.get("/inventory/public"),
+        ]);
+        const d = storeResponse.data;
         const storeList = Array.isArray(d) ? d : d?.stores || d?.data || [];
         setStores(storeList);
+        const productData = productResponse.data;
+        setProducts(Array.isArray(productData) ? productData : productData?.products || productData?.data || []);
         // Extract unique real categories from stores
         const cats = [...new Set(storeList.flatMap(s => s.categories || []).filter(Boolean))];
         setCategories(cats);
-      } catch { setStores([]); }
-      finally { setLoading(p => ({ ...p, stores: false })); }
+      } catch { setStores([]); setProducts([]); }
+      finally { setLoading(p => ({ ...p, stores: false, products: false })); }
     })();
     loadCartCount(); getLocation();
     const onCart = () => loadCartCount();
@@ -115,6 +122,33 @@ export default function UserDashboard() {
       window.removeEventListener("openCartDrawer", onOpen);
     };
   }, [loadCartCount, getLocation]);
+
+  const productsForStore = storeId => products.filter(product => {
+    const productStoreId = product.storeId?._id || product.storeId;
+    return String(productStoreId || "") === String(storeId);
+  });
+
+  const StoreProductRows = ({ mobile = false }) => (
+    <section style={{ marginBottom: 30 }}>
+      <div style={{ padding: mobile ? "0 16px" : 0, marginBottom: 14 }}>
+        <div style={{ fontWeight: 900, fontSize: mobile ? 18 : 20, color: "#111827" }}>Products by Store</div>
+        <div style={{ color: "#6b7280", fontSize: 12, marginTop: 3 }}>Tap a product to open it inside its store.</div>
+      </div>
+      {loading.products ? <div style={{ padding: mobile ? "0 16px" : 0 }}><Skeleton h={150} r={18} /></div> : stores.map(store => {
+        const storeProducts = productsForStore(store._id);
+        if (!storeProducts.length) return null;
+        return <div key={store._id} style={{ marginBottom: 22 }}>
+          <div style={{ padding: mobile ? "0 16px" : 0, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontWeight: 800, color: "#111827", fontSize: 15 }}>{store.name}</div>
+            <span onClick={() => navigate(`/shop/${store._id}`)} style={{ color: "#1a9c3e", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>View store ›</span>
+          </div>
+          <div style={{ display: "flex", gap: 12, overflowX: "auto", padding: mobile ? "0 16px 5px" : "0 0 5px", scrollbarWidth: "none" }}>
+            {storeProducts.slice(0, 10).map(product => <div key={product._id} style={{ flex: "0 0 auto" }}><ProductCard product={product} isMobile={mobile} /></div>)}
+          </div>
+        </div>;
+      })}
+    </section>
+  );
 
   const handleSearch = e => {
     if (e.key === "Enter" && search.trim()) navigate(`/browse-stores?q=${encodeURIComponent(search.trim())}`);
@@ -304,7 +338,7 @@ export default function UserDashboard() {
                 <div key={store._id} onClick={() => navigate(`/shop/${store._id}`)}
                   style={{ flexShrink: 0, width: 155, cursor: "pointer" }}>
                   <div style={{ height: 100, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, position: "relative" }}>
-                    {store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 16 }} /> : "🏪"}
+                    <img src={store.coverImage || defaultStoreCover} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 16 }} />
                     <div style={{ position: "absolute", bottom: 6, right: 8, background: "rgba(0,0,0,0.5)", padding: "2px 7px", borderRadius: 20, fontSize: 10, color: "white", fontWeight: 600 }}>15 min</div>
                   </div>
                   <div style={{ marginTop: 8, padding: "0 2px" }}>
@@ -324,6 +358,8 @@ export default function UserDashboard() {
               <div style={{ width: 14, flexShrink: 0 }} />
             </div>
           </div>
+
+          <StoreProductRows mobile />
 
         </div>
 
@@ -431,7 +467,7 @@ export default function UserDashboard() {
                 style={{ padding: "12px 18px", borderBottom: i < stores.length - 1 ? "1px solid #f5f5f5" : "none", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", transition: "background 0.18s" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#f0fdf4"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, overflow: "hidden", background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🏪"}</div>
+                <div style={{ width: 38, height: 38, borderRadius: 10, overflow: "hidden", background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}><img src={store.coverImage || defaultStoreCover} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 13, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{store.name}</div>
                   <div style={{ fontSize: 11, color: "#1a9c3e", fontWeight: 600, marginTop: 2 }}>{(store.categories || []).join(", ")}</div>
@@ -523,7 +559,7 @@ export default function UserDashboard() {
                 <div key={store._id} className="store-card" onClick={() => navigate(`/shop/${store._id}`)}
                   style={{ background: "white", borderRadius: 20, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.07)", cursor: "pointer", transition: "all 0.25s" }}>
                   <div style={{ height: 110, background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44, position: "relative" }}>
-                    {store.coverImage ? <img src={store.coverImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "🏪"}
+                    <img src={store.coverImage || defaultStoreCover} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(6px)", padding: "3px 9px", borderRadius: 20, fontSize: 10, color: "white", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                       <FaClock size={9} /> 15 min
                     </div>
@@ -544,6 +580,8 @@ export default function UserDashboard() {
               ))}
             </div>
           </section>
+
+          <StoreProductRows />
 
         </main>
       </div>
@@ -570,7 +608,7 @@ export default function UserDashboard() {
 }
 
 /* ── Product Card ── */
-function ProductCard({ product, favorites, loadFavorites, isMobile }) {
+function ProductCard({ product, favorites = [], loadFavorites = () => {}, isMobile = false }) {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
   const [qty, setQty] = useState(0);
@@ -626,7 +664,10 @@ function ProductCard({ product, favorites, loadFavorites, isMobile }) {
   const imgH = isMobile ? 140 : 160;
 
   return (
-    <div className="prod-card" onClick={() => navigate(`/product/${product._id}`)}
+    <div className="prod-card" onClick={() => {
+      const storeId = product.storeId?._id || product.storeId;
+      navigate(storeId ? `/shop/${storeId}?product=${product._id}` : `/product/${product._id}`);
+    }}
       style={{ background: "white", borderRadius: isMobile?18:20, overflow: "hidden", boxShadow: "0 3px 14px rgba(0,0,0,0.07)", cursor: "pointer", transition: "all 0.22s", border: "1px solid #f3f4f6", position: "relative", display: "flex", flexDirection: "column" }}>
 
       {discount > 0 && <div style={{ position:"absolute", top:8, left:8, background:"#ef4444", color:"white", fontSize:9, fontWeight:800, padding:"3px 7px", borderRadius:20, zIndex:2 }}>{discount}% OFF</div>}

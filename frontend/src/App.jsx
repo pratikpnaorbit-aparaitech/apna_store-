@@ -80,10 +80,7 @@ import "./assets/styles/thermal.css";
 
 function App() {
   const { pathname } = useLocation();
-  const showUserChat = [
-    "/user-dashboard", "/browse-stores", "/checkout", "/my-orders",
-    "/profile", "/order-success", "/shop/", "/product/", "/category/",
-  ].some((path) => pathname === path || (path.endsWith("/") && pathname.startsWith(path)));
+  const showUserChat = pathname === "/user-dashboard";
 
   return (
     <>

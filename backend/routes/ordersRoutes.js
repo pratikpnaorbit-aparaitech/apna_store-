@@ -25,8 +25,14 @@ function getRazorpay() {
 
 async function buildOrderPayload(body, userId) {
   if (!Array.isArray(body.items) || !body.items.length) throw Object.assign(new Error("Order items are required"), { statusCode: 400 });
+  if (!body.address?.street || !body.address?.city) throw Object.assign(new Error("A complete delivery address is required"), { statusCode: 400 });
   const ids = body.items.map((item) => item.productId).filter(mongoose.isValidObjectId);
   const products = await Product.find({ _id: { $in: ids }, is_active: 1 });
+  if (products.length !== ids.length) throw Object.assign(new Error("One or more products are no longer available"), { statusCode: 400 });
+  const storeIds = new Set(products.map((product) => String(product.storeId || "")));
+  if (storeIds.size !== 1 || storeIds.has("")) throw Object.assign(new Error("All products in an order must belong to the same store"), { statusCode: 400 });
+  const resolvedStoreId = [...storeIds][0];
+  if (body.storeId && String(body.storeId) !== resolvedStoreId) throw Object.assign(new Error("Cart store does not match the selected products"), { statusCode: 400 });
   const productMap = new Map(products.map((product) => [String(product._id), product]));
   const items = body.items.map((item) => {
     const product = productMap.get(String(item.productId));
@@ -45,7 +51,7 @@ async function buildOrderPayload(body, userId) {
     : 0;
   return {
     userId,
-    storeId: body.storeId || products[0]?.storeId || null,
+    storeId: resolvedStoreId,
     items,
     address: body.address,
     itemsTotal,

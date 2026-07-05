@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, shadow } from "../theme";
 import { useCart } from "../context/CartContext";
 
@@ -7,10 +7,16 @@ export default function ProductCard({ product, onPress, compact = false }) {
   const { add, items, change } = useCart();
   const cartItem = items.find((item) => item._id === product._id);
   const price = Number(product.discount_price ?? product.price);
+  const addProduct = (event) => {
+    event?.stopPropagation?.();
+    if (Number(product.stock) < 1) return Alert.alert("Out of stock", `${product.name} is currently unavailable.`);
+    const result = add(product);
+    if (!result.ok) Alert.alert("Different store", result.message);
+  };
   return (
     <Pressable onPress={onPress} style={[styles.card, compact && styles.compact]}>
       <View style={styles.imageBox}>{product.image_url ? <Image source={{ uri: product.image_url }} style={styles.image} resizeMode="contain" /> : <Ionicons name="basket-outline" size={40} color="#B9A8D8" />}{product.discount_price ? <Text style={styles.discount}>{Math.max(1, Math.round((1 - product.discount_price / product.price) * 100))}% OFF</Text> : null}</View>
-      <View style={styles.content}><Text numberOfLines={2} style={styles.name}>{product.name}</Text><Text style={styles.weight}>{product.category || "Fresh product"}</Text><View style={styles.row}><View><Text style={styles.price}>₹{price}</Text>{product.discount_price ? <Text style={styles.old}>₹{product.price}</Text> : null}</View>{cartItem ? <View style={styles.stepper}><Pressable onPress={() => change(product._id, -1)}><Ionicons name="remove" size={17} color="white" /></Pressable><Text style={styles.qty}>{cartItem.quantity}</Text><Pressable onPress={() => change(product._id, 1)}><Ionicons name="add" size={17} color="white" /></Pressable></View> : <Pressable onPress={() => add(product)} style={styles.add}><Text style={styles.addText}>ADD</Text></Pressable>}</View></View>
+      <View style={styles.content}><Text numberOfLines={2} style={styles.name}>{product.name}</Text><Text style={styles.weight}>{product.category || "Fresh product"}</Text><View style={styles.row}><View><Text style={styles.price}>₹{price}</Text>{product.discount_price ? <Text style={styles.old}>₹{product.price}</Text> : null}</View>{cartItem ? <View style={styles.stepper}><Pressable onPress={(event) => { event.stopPropagation?.(); change(product._id, -1); }}><Ionicons name="remove" size={17} color="white" /></Pressable><Text style={styles.qty}>{cartItem.quantity}</Text><Pressable onPress={(event) => { event.stopPropagation?.(); if (cartItem.quantity < Number(product.stock)) change(product._id, 1); else Alert.alert("Stock limit", `Only ${product.stock} available.`); }}><Ionicons name="add" size={17} color="white" /></Pressable></View> : <Pressable onPress={addProduct} style={styles.add}><Text style={styles.addText}>{Number(product.stock) < 1 ? "SOLD" : "ADD"}</Text></Pressable>}</View></View>
     </Pressable>
   );
 }
