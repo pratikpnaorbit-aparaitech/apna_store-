@@ -51,6 +51,7 @@ export default function UserDashboard() {
   const [search, setSearch]         = useState("");
   const [loading, setLoading]       = useState({ stores: true, products: true });
   const [countdown, setCountdown]   = useState(3 * 3600 + 44 * 60 + 57);
+  const [favorites, setFavorites]   = useState([]);
   const [isMobile, setIsMobile]     = useState(window.innerWidth < 768);
   const searchRef = useRef();
 
@@ -73,6 +74,11 @@ export default function UserDashboard() {
   const loadCartCount = useCallback(() => {
     try { setCartCount(JSON.parse(localStorage.getItem("cart") || "[]").reduce((s, i) => s + (i.quantity || 0), 0)); }
     catch { setCartCount(0); }
+  }, []);
+
+  const loadFavorites = useCallback(() => {
+    try { setFavorites(JSON.parse(localStorage.getItem("favorites") || "[]")); }
+    catch { setFavorites([]); }
   }, []);
 
   const getLocation = useCallback(() => {
@@ -112,7 +118,7 @@ export default function UserDashboard() {
       } catch { setStores([]); setProducts([]); }
       finally { setLoading(p => ({ ...p, stores: false, products: false })); }
     })();
-    loadCartCount(); getLocation();
+    loadCartCount(); loadFavorites(); getLocation();
     const onCart = () => loadCartCount();
     const onOpen = () => setCartOpen(true);
     window.addEventListener("cartUpdated", onCart);
@@ -121,7 +127,7 @@ export default function UserDashboard() {
       window.removeEventListener("cartUpdated", onCart);
       window.removeEventListener("openCartDrawer", onOpen);
     };
-  }, [loadCartCount, getLocation]);
+  }, [loadCartCount, loadFavorites, getLocation]);
 
   const productsForStore = storeId => products.filter(product => {
     const productStoreId = product.storeId?._id || product.storeId;
@@ -143,12 +149,26 @@ export default function UserDashboard() {
             <span onClick={() => navigate(`/shop/${store._id}`)} style={{ color: "#1a9c3e", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>View store ›</span>
           </div>
           <div style={{ display: "flex", gap: 12, overflowX: "auto", padding: mobile ? "0 16px 5px" : "0 0 5px", scrollbarWidth: "none" }}>
-            {storeProducts.slice(0, 10).map(product => <div key={product._id} style={{ flex: "0 0 auto" }}><ProductCard product={product} isMobile={mobile} /></div>)}
+            {storeProducts.slice(0, 10).map(product => <div key={product._id} style={{ flex: mobile ? "0 0 168px" : "0 0 210px", width: mobile ? 168 : 210 }}><ProductCard product={product} favorites={favorites} loadFavorites={loadFavorites} isMobile={mobile} /></div>)}
           </div>
         </div>;
       })}
     </section>
   );
+
+  const FavoriteProducts = ({ mobile = false }) => {
+    const favoriteProducts = products.filter(product => favorites.includes(product._id));
+    if (!favoriteProducts.length) return null;
+    return <section style={{ marginBottom: 30, padding: mobile ? "0 16px" : 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
+        <FaHeart color="#ef4444" />
+        <div><div style={{ fontWeight: 900, fontSize: mobile ? 18 : 20, color: "#111827" }}>Your Favourites</div><div style={{ color: "#6b7280", fontSize: 12, marginTop: 2 }}>Saved products, ready when you are.</div></div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fill,minmax(190px,210px))", gap: 16 }}>
+        {favoriteProducts.map(product => <ProductCard key={product._id} product={product} favorites={favorites} loadFavorites={loadFavorites} isMobile={mobile} />)}
+      </div>
+    </section>;
+  };
 
   const handleSearch = e => {
     if (e.key === "Enter" && search.trim()) navigate(`/browse-stores?q=${encodeURIComponent(search.trim())}`);
@@ -359,6 +379,7 @@ export default function UserDashboard() {
             </div>
           </div>
 
+          <FavoriteProducts mobile />
           <StoreProductRows mobile />
 
         </div>
@@ -581,6 +602,7 @@ export default function UserDashboard() {
             </div>
           </section>
 
+          <FavoriteProducts />
           <StoreProductRows />
 
         </main>

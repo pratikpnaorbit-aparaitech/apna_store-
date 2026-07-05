@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
-import { FaArrowLeft, FaSearch, FaMapMarkerAlt, FaPhone } from "react-icons/fa";
+import { FaArrowLeft, FaSearch, FaMapMarkerAlt, FaPhone, FaHeart, FaRegHeart } from "react-icons/fa";
 import groceryStoreHero from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
 
 const PUBLIC = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api" });
@@ -26,6 +26,7 @@ export default function ShopPage() {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem("favorites") || "[]"); } catch { return []; } });
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -74,6 +75,12 @@ export default function ShopPage() {
   };
 
   const getQty = (id) => cart.find(p => p._id === id)?.quantity || 0;
+  const toggleFavorite = (e, id) => {
+    e.stopPropagation();
+    const next = favorites.includes(id) ? favorites.filter(favoriteId => favoriteId !== id) : [...favorites, id];
+    setFavorites(next);
+    localStorage.setItem("favorites", JSON.stringify(next));
+  };
   const categories = ["All", ...new Set(products.map(p => p.category).filter(Boolean))];
   const filtered = products.filter(p => {
     const matchCat = categoryFilter === "All" || p.category === categoryFilter;
@@ -85,7 +92,7 @@ export default function ShopPage() {
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#f5f5f0" }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}.shop-products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,220px));gap:18px;align-items:stretch}.shop-product-card{transition:transform .2s,box-shadow .2s}.shop-product-card:hover{transform:translateY(-4px);box-shadow:0 14px 35px rgba(24,70,38,.13)!important}@media(max-width:600px){.shop-products-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}`}</style>
       <div style={{ width: 40, height: 40, border: "4px solid #e5e7eb", borderTop: "4px solid #1a9c3e", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
     </div>
   );
@@ -166,11 +173,11 @@ export default function ShopPage() {
             <div style={{ fontWeight: 700, fontSize: 16 }}>No products found</div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="shop-products-grid">
             {filtered.map(product => {
               const qty = getQty(product._id);
               return (
-                <div key={product._id} id={`product-${product._id}`}
+                <div className="shop-product-card" key={product._id} id={`product-${product._id}`}
                   onClick={() => navigate(`/product/${product._id}`)}
                   style={{ background: "white", borderRadius: 16, overflow: "hidden", boxShadow: String(product._id) === selectedProductId ? "0 0 0 3px #1a9c3e, 0 4px 18px rgba(26,156,62,.24)" : "0 2px 12px rgba(0,0,0,0.07)", cursor: "pointer" }}>
                   <div style={{ position: "relative", height: 130, background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -181,6 +188,7 @@ export default function ShopPage() {
                     {product.is_featured && (
                       <span style={{ position: "absolute", top: 8, left: 8, background: "#1a9c3e", color: "white", fontSize: 9, fontWeight: 700, padding: "3px 8px", borderRadius: 20 }}>⭐ Bestseller</span>
                     )}
+                    <button onClick={e => toggleFavorite(e, product._id)} aria-label={favorites.includes(product._id) ? "Remove from favourites" : "Add to favourites"} style={{ position: "absolute", top: 8, right: 8, width: 34, height: 34, display: "grid", placeItems: "center", border: 0, borderRadius: "50%", background: "white", color: favorites.includes(product._id) ? "#ef4444" : "#9ca3af", boxShadow: "0 3px 10px rgba(0,0,0,.12)", cursor: "pointer" }}>{favorites.includes(product._id) ? <FaHeart /> : <FaRegHeart />}</button>
                     {qty === 0 ? (
                       <button onClick={e => addToCart(e, product)}
                         style={{ position: "absolute", bottom: 8, right: 8, background: "#1a9c3e", color: "white", border: "none", borderRadius: 10, width: 34, height: 34, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, boxShadow: "0 2px 8px rgba(26,156,62,0.4)" }}>

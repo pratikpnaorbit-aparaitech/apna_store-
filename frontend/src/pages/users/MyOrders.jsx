@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { API } from "../../services/api";
 import { useNavigate } from "react-router-dom";
-import { FaArrowLeft, FaChevronRight, FaMapMarkerAlt, FaTimes, FaMotorcycle } from "react-icons/fa";
+import { FaArrowLeft, FaChevronRight, FaMapMarkerAlt, FaTimes, FaMotorcycle, FaHeart, FaBoxOpen, FaClock } from "react-icons/fa";
+import ordersBackground from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
 
 const STATUS_CONFIG = {
   Placed:             { color: "#3b82f6", bg: "#eff6ff", icon: "🕐", label: "Order Placed" },
@@ -182,6 +183,8 @@ export default function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [activeTab, setActiveTab] = useState("all");
+  const [cancellingId, setCancellingId] = useState(null);
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
@@ -215,33 +218,60 @@ export default function MyOrders() {
   });
 
   const getStepIndex = (status) => STEPS.indexOf(status);
+  const canCancel = (order) => ["Placed", "Confirmed"].includes(order.status) && !(order.paymentMethod === "Razorpay" && order.paymentStatus === "paid");
+  const cancelOrder = async (event, order) => {
+    event?.stopPropagation();
+    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+    try {
+      setCancellingId(order._id);
+      const { data } = await API.put(`/orders/${order._id}/cancel`);
+      const cancelledOrder = data.order || { ...order, status: "Cancelled" };
+      setOrders(current => current.map(item => item._id === order._id ? cancelledOrder : item));
+      setSelected(current => current?._id === order._id ? cancelledOrder : current);
+    } catch (error) {
+      window.alert(error.response?.data?.message || "Order cancellation failed. Please try again.");
+    } finally {
+      setCancellingId(null);
+    }
+  };
+  const completedOrders = orders.filter(order => ["Delivered", "Cancelled"].includes(order.status));
+  const activeOrders = orders.filter(order => !["Delivered", "Cancelled"].includes(order.status));
+  const favoriteIds = (() => { try { return JSON.parse(localStorage.getItem("favorites") || "[]"); } catch { return []; } })();
+  const favoriteItems = Array.from(new Map(orders.flatMap(order => order.items || []).filter(item => favoriteIds.includes(item.productId?._id || item.productId || item._id)).map(item => [String(item.productId?._id || item.productId || item._id), item])).values());
+  const visibleOrders = activeTab === "active" ? activeOrders : activeTab === "completed" ? completedOrders : orders;
 
   return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#f5f5f0", minHeight: "100vh", paddingBottom: 40 }}>
+    <div className="orders-page" style={{ fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", paddingBottom: 56 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
         @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.3)} }
         @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+        .orders-page{position:relative;background:#f4f7f4;isolation:isolate}.orders-page:before{content:"";position:fixed;inset:0;z-index:-2;background:linear-gradient(rgba(244,249,245,.90),rgba(244,249,245,.96)),url(${ordersBackground}) center/cover no-repeat}.orders-page:after{content:"";position:fixed;inset:0;z-index:-1;backdrop-filter:blur(10px);pointer-events:none}.orders-shell{max-width:1120px;margin:0 auto;padding:32px}.orders-hero{position:relative;overflow:hidden;padding:34px 36px;border-radius:28px;background:linear-gradient(120deg,rgba(10,91,37,.96),rgba(32,178,86,.88));color:white;box-shadow:0 24px 60px rgba(12,90,39,.18)}.orders-hero:after{content:"";position:absolute;width:260px;height:260px;border-radius:50%;right:-70px;top:-120px;background:rgba(255,255,255,.10)}.orders-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}.orders-summary>div{padding:18px 20px;border:1px solid rgba(255,255,255,.2);border-radius:18px;background:rgba(255,255,255,.13);backdrop-filter:blur(12px)}.orders-tabs{display:flex;gap:10px;margin:28px 0 20px;padding:7px;border:1px solid #e5ece7;border-radius:18px;background:rgba(255,255,255,.85);box-shadow:0 8px 28px rgba(15,23,42,.05)}.orders-tabs button{display:flex;align-items:center;gap:8px;padding:11px 18px;border:0;border-radius:12px;background:transparent;color:#647067;font-weight:700;cursor:pointer}.orders-tabs button.active{background:#159b49;color:white;box-shadow:0 8px 18px rgba(21,155,73,.22)}.orders-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.professional-order-card{padding:20px!important;border:1px solid rgba(226,232,226,.9)!important;border-radius:20px!important;box-shadow:0 12px 35px rgba(30,55,39,.07)!important;transition:transform .2s,box-shadow .2s}.professional-order-card:hover{transform:translateY(-3px);box-shadow:0 18px 42px rgba(30,55,39,.12)!important}.favorite-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px}.favorite-order-item{display:flex;align-items:center;gap:14px;padding:20px;border:1px solid #e7ede8;border-radius:20px;background:rgba(255,255,255,.92);box-shadow:0 12px 34px rgba(30,55,39,.07)}.favorite-order-item>span{width:54px;height:54px;display:grid;place-items:center;border-radius:16px;background:#fff0f2;font-size:25px}.empty-orders{grid-column:1/-1;padding:70px 24px;border:1px dashed #cddace;border-radius:24px;background:rgba(255,255,255,.7);text-align:center}@media(max-width:720px){.orders-shell{padding:20px 16px}.orders-hero{padding:26px 22px;border-radius:22px}.orders-summary{grid-template-columns:1fr;gap:10px}.orders-tabs{overflow-x:auto}.orders-tabs button{white-space:nowrap;padding:10px 13px}.orders-list{grid-template-columns:1fr}.orders-page:after{backdrop-filter:blur(7px)}}
       `}</style>
 
       {/* HEADER */}
-      <div style={{ background: "white", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid #f0f0f0", position: "sticky", top: 0, zIndex: 40 }}>
+      <div style={{ background: "rgba(255,255,255,.9)", backdropFilter: "blur(16px)", padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid #e8eee9", position: "sticky", top: 0, zIndex: 40 }}>
         <button onClick={() => navigate(-1)} style={{ background: "#f5f5f5", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <FaArrowLeft size={14} color="#374151" />
         </button>
-        <span style={{ fontWeight: 800, fontSize: 18, color: "#111" }}>My Orders</span>
+        <span style={{ fontWeight: 800, fontSize: 18, color: "#111" }}>My Bookings & Orders</span>
       </div>
 
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "16px" }}>
+      <div className="orders-shell">
+        <section className="orders-hero">
+          <div style={{ position: "relative", zIndex: 1 }}><div style={{ fontSize: 13, fontWeight: 700, color: "#c9f6d8", textTransform: "uppercase", letterSpacing: 1 }}>Your shopping activity</div><h1 style={{ margin: "7px 0 8px", fontSize: "clamp(28px,4vw,42px)", lineHeight: 1.1 }}>Everything you ordered, in one place.</h1><p style={{ margin: 0, maxWidth: 620, color: "rgba(255,255,255,.78)" }}>Track active deliveries, revisit completed bookings and quickly find your saved favourites.</p></div>
+          <div className="orders-summary"><div><FaBoxOpen /><strong style={{ display: "block", fontSize: 24, marginTop: 8 }}>{orders.length}</strong><span style={{ fontSize: 12, color: "#d9f8e4" }}>Total orders</span></div><div><FaClock /><strong style={{ display: "block", fontSize: 24, marginTop: 8 }}>{activeOrders.length}</strong><span style={{ fontSize: 12, color: "#d9f8e4" }}>Active bookings</span></div><div><FaHeart /><strong style={{ display: "block", fontSize: 24, marginTop: 8 }}>{favoriteItems.length}</strong><span style={{ fontSize: 12, color: "#d9f8e4" }}>Favourite items</span></div></div>
+        </section>
+        <div className="orders-tabs">{[["all","All Orders",FaBoxOpen],["active","Active",FaClock],["completed","Completed",FaChevronRight],["favorites","Favourites",FaHeart]].map(([key,label,Icon])=><button key={key} className={activeTab===key?"active":""} onClick={()=>setActiveTab(key)}><Icon />{label}</button>)}</div>
         {loading && orders.length === 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="orders-list">
             {[1,2,3].map(i => (
               <div key={i} style={{ background: "white", borderRadius: 16, padding: 20, height: 100, animation: "pulse 1.5s infinite" }} />
             ))}
           </div>
         ) : orders.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "80px 20px" }}>
+          <div className="empty-orders">
             <div style={{ fontSize: 64, marginBottom: 16 }}>📦</div>
             <div style={{ fontWeight: 800, fontSize: 20, color: "#111", marginBottom: 8 }}>No orders yet</div>
             <div style={{ color: "#6b7280", fontSize: 14, marginBottom: 24 }}>Looks like you haven't ordered anything yet!</div>
@@ -249,12 +279,14 @@ export default function MyOrders() {
               Start Shopping
             </button>
           </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {orders.map(order => {
+        ) : activeTab === "favorites" ? (
+          favoriteItems.length ? <div className="favorite-grid">{favoriteItems.map((item,index)=><div className="favorite-order-item" key={item._id || item.productId || index}><span>❤️</span><div><strong style={{ display:"block",color:"#17221a" }}>{item.name}</strong><small style={{ color:"#718076" }}>Saved from your previous orders</small><div style={{ marginTop:6,fontWeight:800,color:"#159b49" }}>₹{item.price}</div></div></div>)}</div> : <div className="empty-orders"><div style={{fontSize:52}}>♡</div><h3>No favourites yet</h3><p style={{color:"#6b7280"}}>Tap the heart on a product to save it here.</p><button onClick={()=>navigate("/user-dashboard")} style={{border:0,borderRadius:12,padding:"12px 22px",background:"#159b49",color:"white",fontWeight:700,cursor:"pointer"}}>Browse products</button></div>
+        ) : visibleOrders.length === 0 ? <div className="empty-orders"><div style={{fontSize:52}}>📦</div><h3>No orders in this section</h3><p style={{color:"#6b7280"}}>Your orders will appear here as their status changes.</p></div> : (
+          <div className="orders-list">
+            {visibleOrders.map(order => {
               const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Placed;
               return (
-                <div key={order._id} onClick={() => setSelected(order)}
+                <div className="professional-order-card" key={order._id} onClick={() => setSelected(order)}
                   style={{ background: "white", borderRadius: 16, padding: 16, boxShadow: "0 2px 12px rgba(0,0,0,0.06)", cursor: "pointer", border: order.status === "Out for Delivery" ? "2px solid #8b5cf6" : "2px solid transparent" }}>
 
                   {/* Live badge for out for delivery */}
@@ -288,6 +320,12 @@ export default function MyOrders() {
                     </span>
                     <span style={{ fontWeight: 800, fontSize: 16, color: "#111" }}>₹{order.totalAmount}</span>
                   </div>
+                  {canCancel(order) && (
+                    <button onClick={(event) => cancelOrder(event, order)} disabled={cancellingId === order._id}
+                      style={{ width: "100%", marginTop: 14, padding: "10px 14px", border: "1px solid #fecaca", borderRadius: 11, background: "#fff", color: "#dc2626", fontWeight: 750, cursor: cancellingId === order._id ? "wait" : "pointer", opacity: cancellingId === order._id ? 0.65 : 1 }}>
+                      {cancellingId === order._id ? "Cancelling..." : "Cancel Order"}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -439,6 +477,12 @@ export default function MyOrders() {
                 style={{ width: "100%", background: "#1a9c3e", color: "white", border: "none", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
                 Order Again 🛒
               </button>
+              {canCancel(selected) && (
+                <button onClick={(event) => cancelOrder(event, selected)} disabled={cancellingId === selected._id}
+                  style={{ width: "100%", marginTop: 10, background: "#fff", color: "#dc2626", border: "1.5px solid #fecaca", borderRadius: 14, padding: "13px", fontSize: 15, fontWeight: 700, cursor: cancellingId === selected._id ? "wait" : "pointer" }}>
+                  {cancellingId === selected._id ? "Cancelling Order..." : "Cancel Order"}
+                </button>
+              )}
             </div>
           </div>
         </div>

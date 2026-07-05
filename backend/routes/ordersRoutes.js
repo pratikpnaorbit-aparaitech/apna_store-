@@ -148,6 +148,32 @@ router.get("/user/:userId", authMiddleware, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.put("/:id/cancel", authMiddleware, allowRole(["user"]), async (req, res, next) => {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, userId: req.user.id });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.status === "Cancelled") return res.json({ success: true, order });
+    if (!["Placed", "Confirmed"].includes(order.status)) {
+      return res.status(400).json({ message: "This order can no longer be cancelled because preparation or delivery has started" });
+    }
+    if (order.paymentMethod === "Razorpay" && order.paymentStatus === "paid") {
+      return res.status(400).json({ message: "Paid online orders require refund assistance. Please contact support." });
+    }
+    order.status = "Cancelled";
+    if (order.paymentStatus === "pending") order.paymentStatus = "cancelled";
+    await order.save();
+    if (order.deliveryPartnerId) {
+      await DeliveryPartner.findByIdAndUpdate(order.deliveryPartnerId, { isAvailable: true, currentOrderId: null });
+    }
+    await Promise.all([
+      createNotification({ recipientType: "user", recipientId: order.userId, title: "Order cancelled", message: `Order #${String(order._id).slice(-6)} was cancelled.`, type: "status", orderId: order._id }),
+      notifyStore(order.storeId, { title: "Order cancelled", message: `Customer cancelled order #${String(order._id).slice(-6)}.`, type: "status", orderId: order._id }),
+      notifyAdmins({ title: "Order cancelled", message: `Order #${String(order._id).slice(-6)} was cancelled by the customer.`, type: "status", orderId: order._id }),
+    ]);
+    res.json({ success: true, message: "Order cancelled successfully", order });
+  } catch (error) { next(error); }
+});
+
 router.get("/all", authMiddleware, allowRole(["super_admin"]), async (req, res, next) => {
   try { res.json(await Order.find().populate("userId", "name mobile email").populate("deliveryPartnerId", "name phone vehicleType").sort({ createdAt: -1 })); }
   catch (error) { next(error); }
