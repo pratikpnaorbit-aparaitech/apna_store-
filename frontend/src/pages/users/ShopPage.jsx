@@ -58,6 +58,7 @@ export default function ShopPage() {
 
   const addToCart = (e, product) => {
     e.stopPropagation();
+    if (Number(product.stock) <= 0) return;
     const pid = product._id;
     const price = product.discount_price || product.price;
     const existing = cart.find(p => p._id === pid);
@@ -179,8 +180,9 @@ export default function ShopPage() {
               return (
                 <div className="shop-product-card" key={product._id} id={`product-${product._id}`}
                   onClick={() => navigate(`/product/${product._id}`)}
-                  style={{ background: "white", borderRadius: 16, overflow: "hidden", boxShadow: String(product._id) === selectedProductId ? "0 0 0 3px #1a9c3e, 0 4px 18px rgba(26,156,62,.24)" : "0 2px 12px rgba(0,0,0,0.07)", cursor: "pointer" }}>
+                  style={{ background: Number(product.stock) <= 0 ? "#111827" : "white", borderRadius: 16, overflow: "hidden", boxShadow: String(product._id) === selectedProductId ? "0 0 0 3px #1a9c3e, 0 4px 18px rgba(26,156,62,.24)" : "0 2px 12px rgba(0,0,0,0.07)", cursor: Number(product.stock) <= 0 ? "not-allowed" : "pointer", opacity: Number(product.stock) <= 0 ? .82 : 1 }}>
                   <div style={{ position: "relative", height: 130, background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {Number(product.stock) <= 0 && <div style={{ position:"absolute",inset:0,zIndex:6,display:"grid",placeItems:"center",background:"rgba(0,0,0,.62)",color:"white",fontWeight:900 }}>OUT OF STOCK</div>}
                     {product.image_url
                       ? <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       : <span style={{ fontSize: 42 }}>📦</span>
@@ -204,7 +206,7 @@ export default function ShopPage() {
                     )}
                   </div>
                   <div style={{ padding: "10px 12px" }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: "#111827", marginBottom: 2 }}>{product.name}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: Number(product.stock) <= 0 ? "white" : "#111827", marginBottom: 2 }}>{product.name} {product.unit ? `(${product.unit})` : ""}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontWeight: 800, fontSize: 14, color: "#111827" }}>₹{product.discount_price || product.price}</span>
                       {product.discount_price && <span style={{ fontSize: 11, color: "#9ca3af", textDecoration: "line-through" }}>₹{product.price}</span>}

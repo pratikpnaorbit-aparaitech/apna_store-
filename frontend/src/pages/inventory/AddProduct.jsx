@@ -13,11 +13,10 @@ const CATEGORIES = [
   "Snacks",
   "Frozen",
   "Stationery",
-  "Personal Care"
+  "Personal Care",
 ];
 
 function AddProduct() {
-
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
@@ -27,15 +26,15 @@ function AddProduct() {
     category: "Fruits",
     price: "",
     stock: "",
-    expiryDate: ""
+    unit: "kg",
+    expiryDate: "",
   });
 
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(null);
 
   const handleSave = async () => {
-
-    const { name, sku, category, price, stock, expiryDate } = product;
+    const { name, sku, category, price, stock, unit, expiryDate } = product;
 
     if (!name || !sku || price === "" || stock === "") {
       alert("Please fill all required fields");
@@ -43,7 +42,6 @@ function AddProduct() {
     }
 
     try {
-
       setLoading(true);
 
       const formData = new FormData();
@@ -53,6 +51,7 @@ function AddProduct() {
       formData.append("category", category);
       formData.append("price", price);
       formData.append("stock", stock);
+      formData.append("unit", unit);
       formData.append("expiryDate", expiryDate);
 
       if (image) {
@@ -61,35 +60,27 @@ function AddProduct() {
 
       await API.post("/inventory", formData, {
         headers: {
-          "Content-Type": "multipart/form-data"
-        }
+          "Content-Type": "multipart/form-data",
+        },
       });
 
       alert("Product added successfully ✅");
 
       navigate("/inventory");
-
     } catch (error) {
-
       console.error("Add product error:", error);
       alert(error.response?.data?.message || "Failed to add product ❌");
-
     } finally {
-
       setLoading(false);
-
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex justify-center p-6">
-
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-lg p-8">
-
         {/* Header */}
 
         <div className="flex items-center gap-3 mb-6">
-
           <div className="p-3 rounded-full bg-green-100 text-green-600">
             <PackagePlus size={24} />
           </div>
@@ -100,13 +91,11 @@ function AddProduct() {
               Enter product details to add it to inventory
             </p>
           </div>
-
         </div>
 
         {/* Form */}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
           {/* Product Name */}
 
           <div>
@@ -115,9 +104,7 @@ function AddProduct() {
               className="mt-1 border p-3 w-full rounded-xl"
               placeholder="e.g. Apple"
               value={product.name}
-              onChange={(e) =>
-                setProduct({ ...product, name: e.target.value })
-              }
+              onChange={(e) => setProduct({ ...product, name: e.target.value })}
             />
           </div>
 
@@ -129,9 +116,7 @@ function AddProduct() {
               className="mt-1 border p-3 w-full rounded-xl"
               placeholder="e.g. APP-001"
               value={product.sku}
-              onChange={(e) =>
-                setProduct({ ...product, sku: e.target.value })
-              }
+              onChange={(e) => setProduct({ ...product, sku: e.target.value })}
             />
           </div>
 
@@ -183,6 +168,24 @@ function AddProduct() {
           {/* Expiry Date */}
 
           <div>
+            <label className="text-sm font-medium">Stock Unit *</label>
+            <select
+              className="mt-1 border p-3 w-full rounded-xl"
+              value={product.unit}
+              onChange={(e) => setProduct({ ...product, unit: e.target.value })}
+            >
+              <option value="kg">Kilogram (kg)</option>
+              <option value="gram">Gram (g)</option>
+              <option value="piece">Piece</option>
+              <option value="pack">Pack</option>
+              <option value="litre">Litre</option>
+              <option value="ml">Millilitre (ml)</option>
+            </select>
+          </div>
+
+          {/* Expiry Date */}
+
+          <div>
             <label className="text-sm font-medium">Expiry Date</label>
             <input
               type="date"
@@ -197,7 +200,6 @@ function AddProduct() {
           {/* Image Upload */}
 
           <div className="md:col-span-2">
-
             <label className="text-sm font-medium">Product Image</label>
 
             <input
@@ -205,41 +207,32 @@ function AddProduct() {
               className="mt-1 border p-3 w-full rounded-xl"
               accept="image/*"
               onChange={(e) => {
-
                 const file = e.target.files[0];
 
                 if (file) {
                   setImage(file);
                   setPreview(URL.createObjectURL(file));
                 }
-
               }}
             />
 
             {/* Image Preview */}
 
             {preview && (
-
               <div className="mt-4">
-
                 <img
                   src={preview}
                   alt="Preview"
                   className="w-32 h-32 object-cover rounded-lg border"
                 />
-
               </div>
-
             )}
-
           </div>
-
         </div>
 
         {/* Buttons */}
 
         <div className="flex gap-4 mt-8">
-
           <button
             onClick={handleSave}
             disabled={loading}
@@ -255,11 +248,8 @@ function AddProduct() {
           >
             <X size={18} /> Cancel
           </button>
-
         </div>
-
       </div>
-
     </div>
   );
 }

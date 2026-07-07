@@ -6,6 +6,7 @@ import {
   FaBell, FaInfoCircle, FaSignOutAlt, FaEdit, FaUser
 } from "react-icons/fa";
 import { MdOutlineLocalOffer } from "react-icons/md";
+import profileBackground from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -60,11 +61,11 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#f5f5f0", minHeight: "100vh", paddingBottom: 40 }}>
+    <div style={{ fontFamily: "'DM Sans', sans-serif", backgroundImage: `linear-gradient(rgba(244,249,245,.88),rgba(244,249,245,.95)),url(${profileBackground})`, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed", minHeight: "100vh", paddingBottom: 40 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
       {/* HEADER */}
-      <div style={{ background: "white", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid #f0f0f0" }}>
+      <div style={{ background: "rgba(255,255,255,.88)", backdropFilter: "blur(14px)", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid #e7eee9" }}>
         <button onClick={() => navigate(-1)} style={{ background: "#f5f5f5", border: "none", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           ←
         </button>
@@ -72,7 +73,7 @@ export default function ProfilePage() {
       </div>
 
       {/* PROFILE CARD */}
-      <div style={{ background: "white", padding: "24px 20px", marginBottom: 12 }}>
+      <div style={{ background: "rgba(255,255,255,.88)", backdropFilter: "blur(16px)", padding: "24px 20px", margin: "18px 20px 12px", borderRadius: 22, boxShadow: "0 16px 45px rgba(25,75,40,.10)", border: "1px solid rgba(255,255,255,.75)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg,#1a9c3e,#0d5c24)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "white", fontWeight: 800, flexShrink: 0 }}>
             {initial}
@@ -92,7 +93,7 @@ export default function ProfilePage() {
       </div>
 
       {/* QUICK ACTIONS */}
-      <div style={{ background: "white", padding: "16px 20px", marginBottom: 12 }}>
+      <div style={{ background: "rgba(255,255,255,.86)", backdropFilter: "blur(14px)", padding: "16px 20px", margin: "0 20px 12px", borderRadius: 20 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           {menuItems.map((item, i) => (
             <button key={i} onClick={item.action} style={{ background: "#f9fafb", border: "none", borderRadius: 14, padding: "16px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: "pointer" }}>
@@ -115,7 +116,7 @@ export default function ProfilePage() {
       </div>
 
       {/* LIST ITEMS */}
-      <div style={{ background: "white", borderRadius: 16, margin: "0 0 12px", overflow: "hidden" }}>
+      <div style={{ background: "rgba(255,255,255,.88)", backdropFilter: "blur(14px)", borderRadius: 20, margin: "0 20px 12px", overflow: "hidden", boxShadow: "0 14px 40px rgba(25,75,40,.08)" }}>
         {listItems.map((item, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: i < listItems.length - 1 ? "1px solid #f5f5f5" : "none", cursor: "pointer" }}
             onClick={item.action} role="button" tabIndex={0} onKeyDown={(event) => event.key === "Enter" && item.action()}>

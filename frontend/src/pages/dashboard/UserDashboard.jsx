@@ -650,6 +650,7 @@ function ProductCard({ product, favorites = [], loadFavorites = () => {}, isMobi
 
   const addToCart = e => {
     e.stopPropagation();
+    if (Number(product.stock) <= 0) return;
     try {
       const cart = JSON.parse(localStorage.getItem("cart")||"[]");
       const pid = product._id, price = product.discount_price || product.price;
@@ -690,7 +691,9 @@ function ProductCard({ product, favorites = [], loadFavorites = () => {}, isMobi
       const storeId = product.storeId?._id || product.storeId;
       navigate(storeId ? `/shop/${storeId}?product=${product._id}` : `/product/${product._id}`);
     }}
-      style={{ background: "white", borderRadius: isMobile?18:20, overflow: "hidden", boxShadow: "0 3px 14px rgba(0,0,0,0.07)", cursor: "pointer", transition: "all 0.22s", border: "1px solid #f3f4f6", position: "relative", display: "flex", flexDirection: "column" }}>
+      style={{ background: Number(product.stock) <= 0 ? "#111827" : "white", borderRadius: isMobile?18:20, overflow: "hidden", boxShadow: "0 3px 14px rgba(0,0,0,0.07)", cursor: Number(product.stock) <= 0 ? "not-allowed" : "pointer", transition: "all 0.22s", border: "1px solid #f3f4f6", position: "relative", display: "flex", flexDirection: "column", opacity: Number(product.stock) <= 0 ? .82 : 1 }}>
+
+      {Number(product.stock) <= 0 && <div style={{ position:"absolute",inset:0,zIndex:5,display:"grid",placeItems:"center",background:"rgba(0,0,0,.58)",color:"white",fontWeight:900,letterSpacing:1 }}>OUT OF STOCK</div>}
 
       {discount > 0 && <div style={{ position:"absolute", top:8, left:8, background:"#ef4444", color:"white", fontSize:9, fontWeight:800, padding:"3px 7px", borderRadius:20, zIndex:2 }}>{discount}% OFF</div>}
       {product.is_featured && <div style={{ position:"absolute", top:8, left:discount>0?58:8, background:"#1a9c3e", color:"white", fontSize:9, fontWeight:700, padding:"3px 7px", borderRadius:20, zIndex:2 }}>⭐ Bestseller</div>}
@@ -708,7 +711,7 @@ function ProductCard({ product, favorites = [], loadFavorites = () => {}, isMobi
 
       <div style={{ padding: isMobile?"10px 12px 14px":"12px 14px 16px", display:"flex", flexDirection:"column", flex:1 }}>
         <div style={{ fontWeight:600, fontSize:isMobile?13:14, color:"#111827", lineHeight:1.3, marginBottom:8, minHeight:isMobile?34:38, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
-          {product.name}
+          {product.name} {product.unit && <span style={{fontSize:11,color:"#9ca3af"}}>({product.unit})</span>}
         </div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:"auto" }}>
           <div>

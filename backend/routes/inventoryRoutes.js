@@ -50,19 +50,21 @@ router.get("/public", async (req, res) => {
       .sort({ is_featured: -1, created_at: -1 })
       .limit(100);
 
-    res.json(products.map(p => ({
-      _id: p._id,
-      name: p.name,
-      category: p.category,
-      price: Number(p.price),
-      discount_price: p.discount_price ?? null,
-      stock: Number(p.stock),
-      is_featured: p.is_featured,
-      storeId: p.storeId,
-      description: p.description || null,
-      image_url: resolveImageUrl(p),
-    })));
-
+    res.json(
+      products.map((p) => ({
+        _id: p._id,
+        name: p.name,
+        category: p.category,
+        price: Number(p.price),
+        discount_price: p.discount_price ?? null,
+        stock: Number(p.stock),
+        unit: p.unit || "piece",
+        is_featured: p.is_featured,
+        storeId: p.storeId,
+        description: p.description || null,
+        image_url: resolveImageUrl(p),
+      })),
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch products" });
@@ -76,8 +78,10 @@ router.get("/public", async (req, res) => {
 ========================= */
 router.get("/public/:id", async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
-      .populate("storeId", "name categories");
+    const product = await Product.findById(req.params.id).populate(
+      "storeId",
+      "name categories",
+    );
 
     if (!product) return res.status(404).json({ message: "Product not found" });
 
@@ -88,6 +92,7 @@ router.get("/public/:id", async (req, res) => {
       price: Number(product.price),
       discount_price: product.discount_price ?? null,
       stock: Number(product.stock),
+      unit: product.unit || "piece",
       is_featured: product.is_featured,
       is_active: product.is_active,
       storeId: product.storeId,
@@ -111,19 +116,21 @@ router.post(
   allowRoles(["admin", "super_admin"]),
   upload.single("image"),
   (req, res) => {
-    if (!req.file) return res.status(400).json({ message: "No image uploaded" });
+    if (!req.file)
+      return res.status(400).json({ message: "No image uploaded" });
 
     // If using Cloudinary (multer-storage-cloudinary), req.file.path is the full URL
     // If using local multer (diskStorage), build the URL manually
-    const imageUrl = req.file.path && req.file.path.startsWith("http")
-      ? req.file.path
-      : `http://localhost:5000/uploads/${req.file.filename}`;
+    const imageUrl =
+      req.file.path && req.file.path.startsWith("http")
+        ? req.file.path
+        : `http://localhost:5000/uploads/${req.file.filename}`;
 
     res.json({
       success: true,
       imageUrl,
     });
-  }
+  },
 );
 
 /* =========================
@@ -134,7 +141,7 @@ router.get(
   "/",
   authMiddleware,
   allowRoles(["admin", "staff", "super_admin"]),
-  inventoryController.getAllProducts
+  inventoryController.getAllProducts,
 );
 
 /* =========================
@@ -145,7 +152,7 @@ router.get(
   "/:id",
   authMiddleware,
   allowRoles(["admin", "staff", "super_admin"]),
-  inventoryController.getProductById
+  inventoryController.getProductById,
 );
 
 /* =========================
@@ -158,7 +165,7 @@ router.post(
   authMiddleware,
   allowRoles(["admin", "super_admin"]),
   upload.single("image"),
-  inventoryController.addProduct
+  inventoryController.addProduct,
 );
 
 /* =========================
@@ -171,7 +178,7 @@ router.put(
   authMiddleware,
   allowRoles(["admin", "super_admin"]),
   upload.single("image"),
-  inventoryController.updateProduct
+  inventoryController.updateProduct,
 );
 
 /* =========================
@@ -182,7 +189,7 @@ router.delete(
   "/:id",
   authMiddleware,
   allowRoles(["admin", "super_admin"]),
-  inventoryController.archiveProduct
+  inventoryController.archiveProduct,
 );
 
 module.exports = router;

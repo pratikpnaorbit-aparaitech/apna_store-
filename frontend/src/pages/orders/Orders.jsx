@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { API } from "../../services/api";
 import { FaEye, FaTimes } from "react-icons/fa";
-import { MapPin, Package } from "lucide-react";
+import { Download, MapPin, Package } from "lucide-react";
 
 const STATUS_OPTIONS = ["Placed", "Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
 
@@ -47,14 +47,25 @@ export default function Orders() {
   const updateStatus = async (orderId, newStatus) => {
     try {
       setUpdatingId(orderId);
-      await API.put(`/orders/${orderId}/status`, { status: newStatus });
-      setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status: newStatus } : o));
-      if (selectedOrder?._id === orderId) setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+      const reason = newStatus === "Cancelled" ? window.prompt("Enter cancellation reason for the customer and store:") : null;
+      if (newStatus === "Cancelled" && !reason?.trim()) return;
+      const { data } = await API.put(`/orders/${orderId}/status`, { status: newStatus, reason: reason?.trim() });
+      const updated = data.order || { ...selectedOrder, status: newStatus };
+      setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
+      if (selectedOrder?._id === orderId) setSelectedOrder(updated);
     } catch (err) {
       alert("Failed to update status");
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const downloadInvoice = async (order) => {
+    try {
+      const response = await API.get(`/orders/${order._id}/invoice`, { responseType: "blob" });
+      const url = URL.createObjectURL(response.data); const link = document.createElement("a");
+      link.href = url; link.download = `INV-${order._id.slice(-8).toUpperCase()}.pdf`; link.click(); URL.revokeObjectURL(url);
+    } catch { alert("Invoice download failed"); }
   };
 
   const formatDate = (d) => new Date(d).toLocaleDateString("en-IN", {
@@ -139,10 +150,7 @@ export default function Orders() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => setSelectedOrder(order)}
-                      className="p-2 hover:bg-purple-50 rounded-lg text-purple-600 transition">
-                      <FaEye />
-                    </button>
+                    <div className="flex gap-1"><button onClick={() => setSelectedOrder(order)} className="p-2 hover:bg-purple-50 rounded-lg text-purple-600 transition"><FaEye /></button><button title="Download invoice" onClick={() => downloadInvoice(order)} className="p-2 hover:bg-green-50 rounded-lg text-green-700 transition"><Download className="w-4 h-4" /></button></div>
                   </td>
                 </tr>
               ))}
@@ -165,6 +173,10 @@ export default function Orders() {
               </button>
             </div>
             <div className="p-6 space-y-5">
+
+              <button onClick={() => downloadInvoice(selectedOrder)} className="w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white"><Download className="w-4 h-4" /> Download Invoice PDF</button>
+
+              {selectedOrder.cancellationReason && <div className="rounded-xl border border-red-200 bg-red-50 p-4"><p className="text-xs font-bold uppercase text-red-500">Cancellation reason</p><p className="mt-1 text-sm font-semibold text-red-800">{selectedOrder.cancellationReason}</p><p className="mt-1 text-xs text-red-500">Cancelled by {selectedOrder.cancelledBy || "customer"}</p></div>}
 
               {/* Status update */}
               <div>
@@ -197,7 +209,7 @@ export default function Orders() {
                 <div className="space-y-2">
                   {selectedOrder.items?.map((item, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-slate-600">{item.name} × {item.quantity}</span>
+                      <span className="text-slate-600">{item.name} × {item.quantity} {item.unit || "piece"}</span>
                       <span className="font-semibold">₹{(item.price * item.quantity).toFixed(2)}</span>
                     </div>
                   ))}

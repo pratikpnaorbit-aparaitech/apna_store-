@@ -13,7 +13,9 @@
       "package": "com.aparaitech.smartstore",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -36,7 +38,10 @@
       "expo-font"
     ],
     "extra": {
-      "apiUrl": "Set EXPO_PUBLIC_API_URL in .env"
+      "apiUrl": "Set EXPO_PUBLIC_API_URL in .env",
+      "eas": {
+        "projectId": "cf7f7c86-b60d-4e06-b7db-072b1ec6d7f8"
+      }
     }
   }
 }

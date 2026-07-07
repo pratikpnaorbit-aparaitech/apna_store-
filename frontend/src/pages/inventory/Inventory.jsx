@@ -38,7 +38,7 @@ function Inventory() {
 
   const emptyForm = {
     name: "", sku: "", category: "", price: "", discount_price: "",
-    stock: "", reorder_level: "5", expiryDate: "", is_featured: false, image_url: ""
+    stock: "", unit: "kg", reorder_level: "5", expiryDate: "", is_featured: false, image_url: ""
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -311,7 +311,7 @@ function Inventory() {
                     {p.discount_price ? `₹${Number(p.discount_price).toFixed(2)}` : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="p-4 text-center">
-                    <span className={`font-bold text-sm ${p.isLowStock ? "text-red-600" : "text-slate-700"}`}>{p.stock}</span>
+                    <span className={`font-bold text-sm ${Number(p.stock) === 0 ? "rounded-md bg-slate-900 px-2 py-1 text-white" : p.isLowStock ? "text-red-600" : "text-slate-700"}`}>{p.stock} {p.unit || "piece"}</span>
                     {p.isLowStock && <div className="text-xs text-red-400">Min: {p.reorder_level}</div>}
                   </td>
                   {showExpiry && (
@@ -593,6 +593,13 @@ function ProductForm({ product, setProduct, onSubmit, submitLabel, showExpiry, s
               onChange={e => setProduct({ ...product, [f.key]: e.target.value })} />
           </div>
         ))}
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-slate-600 mb-1">Stock measured in</label>
+        <select value={product.unit || "piece"} onChange={e => setProduct({ ...product, unit: e.target.value })} className="border border-slate-200 p-2.5 w-full rounded-lg text-sm focus:ring-2 focus:ring-green-400 outline-none">
+          <option value="kg">Kilogram (kg)</option><option value="gram">Gram (g)</option><option value="piece">Piece</option><option value="pack">Pack</option><option value="litre">Litre</option><option value="ml">Millilitre (ml)</option>
+        </select>
       </div>
 
       {/* ── EXPIRY DATE — only shown for General / Pharmacy stores ── */}

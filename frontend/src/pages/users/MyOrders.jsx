@@ -221,10 +221,13 @@ export default function MyOrders() {
   const canCancel = (order) => ["Placed", "Confirmed"].includes(order.status) && !(order.paymentMethod === "Razorpay" && order.paymentStatus === "paid");
   const cancelOrder = async (event, order) => {
     event?.stopPropagation();
-    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+    const reason = window.prompt("Why are you cancelling this order?\nExample: Ordered by mistake, delivery taking too long, or address issue.");
+    if (reason === null) return;
+    if (reason.trim().length < 3) { window.alert("Please enter a cancellation reason."); return; }
+    if (!window.confirm("Cancel this order? The store and admin will be notified.")) return;
     try {
       setCancellingId(order._id);
-      const { data } = await API.put(`/orders/${order._id}/cancel`);
+      const { data } = await API.put(`/orders/${order._id}/cancel`, { reason: reason.trim() });
       const cancelledOrder = data.order || { ...order, status: "Cancelled" };
       setOrders(current => current.map(item => item._id === order._id ? cancelledOrder : item));
       setSelected(current => current?._id === order._id ? cancelledOrder : current);

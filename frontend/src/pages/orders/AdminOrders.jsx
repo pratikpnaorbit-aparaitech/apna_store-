@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { API } from "../../services/api";
-import { Package, X, MapPin, Truck } from "lucide-react";
+import { Download, Package, X, MapPin, Truck } from "lucide-react";
 
 const STATUS_COLORS = {
   Placed:             "bg-blue-100 text-blue-700",
@@ -39,7 +39,7 @@ export default function AdminOrders() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const res = await API.get(`/orders/store/${storeId}`);
+      const res = await API.get(user.role === "super_admin" ? "/orders/all" : `/orders/store/${storeId}`);
       setOrders(res.data || []);
     } catch (err) {
       console.error(err);
@@ -88,6 +88,18 @@ export default function AdminOrders() {
     }
   };
 
+  const downloadInvoice = async (order) => {
+    try {
+      const response = await API.get(`/orders/${order._id}/invoice`, { responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `INV-${order._id.slice(-8).toUpperCase()}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch { alert("Invoice download failed"); }
+  };
+
   const formatDate = (d) => new Date(d).toLocaleDateString("en-IN", {
     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
   });
@@ -100,7 +112,7 @@ export default function AdminOrders() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-black text-slate-800">Store Orders</h1>
+          <h1 className="text-2xl font-black text-slate-800">{user.role === "super_admin" ? "All Store Orders" : "Store Orders"}</h1>
           {newOrders > 0 && (
             <p className="text-sm text-orange-600 font-semibold mt-1">
               🔔 {newOrders} new order{newOrders > 1 ? "s" : ""} waiting!
@@ -182,10 +194,7 @@ export default function AdminOrders() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => setSelectedOrder(order)}
-                      className="text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg font-semibold transition">
-                      Manage
-                    </button>
+                    <div className="flex gap-2"><button onClick={() => setSelectedOrder(order)} className="text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg font-semibold transition">Manage</button><button title="Download invoice" onClick={() => downloadInvoice(order)} className="p-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100"><Download className="w-4 h-4" /></button></div>
                   </td>
                 </tr>
               ))}
@@ -216,6 +225,10 @@ export default function AdminOrders() {
                   {selectedOrder.status}
                 </span>
               </div>
+
+              {selectedOrder.cancellationReason && <div className="rounded-xl border border-red-200 bg-red-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-red-500">Cancellation reason</p><p className="mt-1 text-sm font-semibold text-red-800">{selectedOrder.cancellationReason}</p><p className="mt-1 text-xs text-red-500">Cancelled by {selectedOrder.cancelledBy || "customer"}</p></div>}
+
+              <button onClick={() => downloadInvoice(selectedOrder)} className="w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white hover:bg-green-700"><Download className="w-4 h-4" /> Download Invoice PDF</button>
 
               {/* Status actions */}
               <div>
@@ -289,7 +302,7 @@ export default function AdminOrders() {
                 <div className="space-y-2">
                   {selectedOrder.items?.map((item, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-slate-600">{item.name} × {item.quantity}</span>
+                      <span className="text-slate-600">{item.name} × {item.quantity} {item.unit || "piece"}</span>
                       <span className="font-semibold">₹{(item.price * item.quantity).toFixed(2)}</span>
                     </div>
                   ))}

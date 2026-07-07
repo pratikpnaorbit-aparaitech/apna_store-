@@ -38,6 +38,7 @@ function normalize(p) {
     price: Number(p.price),
     discount_price: p.discount_price ?? null,
     stock: Number(p.stock),
+    unit: p.unit || "piece",
     reorder_level: p.reorder_level ?? 5,
     expiryDate: p.expiry_date,
     is_featured: p.is_featured || false,
@@ -122,6 +123,7 @@ exports.addProduct = async (req, res) => {
     price,
     discount_price,
     stock,
+    unit,
     reorder_level,
     expiryDate,
     is_featured,
@@ -154,6 +156,7 @@ exports.addProduct = async (req, res) => {
       discount_price: discount_price ? Number(discount_price) : null,
 
       stock: Number(stock),
+      unit: unit || "piece",
 
       reorder_level: reorder_level ? Number(reorder_level) : 5,
 
@@ -204,6 +207,7 @@ exports.updateProduct = async (req, res) => {
     price,
     discount_price,
     stock,
+    unit,
     reorder_level,
     expiryDate,
     is_featured,
@@ -230,6 +234,7 @@ exports.updateProduct = async (req, res) => {
       price: Number(price),
       discount_price: discount_price ? Number(discount_price) : null,
       stock: Number(stock),
+      unit: unit || "piece",
       reorder_level: reorder_level ? Number(reorder_level) : 5,
       expiry_date: expiryDate || null,
       is_featured: is_featured || false,

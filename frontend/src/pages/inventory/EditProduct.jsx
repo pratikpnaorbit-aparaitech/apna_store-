@@ -111,6 +111,14 @@ export default function EditProduct() {
           </div>
 
           {/* Expiry */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Stock Unit</label>
+            <select className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" value={product.unit || "piece"} onChange={e => setProduct({ ...product, unit: e.target.value })}>
+              <option value="kg">Kilogram (kg)</option><option value="gram">Gram (g)</option><option value="piece">Piece</option><option value="pack">Pack</option><option value="litre">Litre</option><option value="ml">Millilitre (ml)</option>
+            </select>
+          </div>
+
+          {/* Expiry */}
           <div className="col-span-2">
             <label className="block text-sm font-medium text-gray-600 mb-1">Expiry Date</label>
             <input
