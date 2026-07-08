@@ -36,15 +36,48 @@ function getRazorpay() {
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
 
+function normalizePaymentMethod(value) {
+  const method = String(value || "COD").trim().toLowerCase();
+  if (["cod", "cash", "cash_on_delivery", "cash on delivery"].includes(method))
+    return "COD";
+  if (["razorpay", "online", "upi", "card"].includes(method))
+    return "Razorpay";
+  const error = new Error("Invalid payment method");
+  error.statusCode = 400;
+  throw error;
+}
+
+function normalizeAddress(address = {}, customerLocation) {
+  const normalized = {
+    name: String(address.name || "Customer").trim(),
+    phone: String(address.phone || "").trim(),
+    street: String(address.street || address.address || "").trim(),
+    city: String(address.city || "").trim(),
+    state: String(address.state || "").trim(),
+    pincode: String(address.pincode || address.pinCode || "").trim(),
+  };
+
+  if (normalized.street.length < 5) {
+    const error = new Error("A complete delivery address is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!normalized.city && !normalized.pincode && !customerLocation) {
+    const error = new Error("Please add city, PIN code, or use current location for delivery");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return normalized;
+}
+
 async function buildOrderPayload(body, userId) {
   if (!Array.isArray(body.items) || !body.items.length)
     throw Object.assign(new Error("Order items are required"), {
       statusCode: 400,
     });
-  if (!body.address?.street || !body.address?.city)
-    throw Object.assign(new Error("A complete delivery address is required"), {
-      statusCode: 400,
-    });
+  const address = normalizeAddress(body.address, body.customerLocation);
   const ids = body.items
     .map((item) => item.productId)
     .filter(mongoose.isValidObjectId);
@@ -111,7 +144,7 @@ async function buildOrderPayload(body, userId) {
     userId,
     storeId: resolvedStoreId,
     items,
-    address: body.address,
+    address,
     itemsTotal,
     deliveryCharge,
     gst,
@@ -196,6 +229,12 @@ router.post(
   allowRole(["user"]),
   async (req, res, next) => {
     try {
+      const paymentMethod = normalizePaymentMethod(req.body.paymentMethod || req.body.paymentType);
+      if (paymentMethod !== "COD") {
+        return res.status(400).json({
+          message: "Use /api/orders/payment/create for Razorpay orders",
+        });
+      }
       const payload = await buildOrderPayload(req.body, req.user.id);
       const order = await Order.create({
         ...payload,
