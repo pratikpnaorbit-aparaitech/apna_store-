@@ -78,6 +78,11 @@ const OrderSchema = new mongoose.Schema(
     },
     cancelledAt: { type: Date, default: null },
     stockReserved: { type: Boolean, default: false },
+    deliveredAt: { type: Date, default: null },
+    deliveryOtpHash: { type: String, default: null, select: false },
+    deliveryOtpExpiresAt: { type: Date, default: null },
+    deliveryOtpVerifiedAt: { type: Date, default: null },
+    deliveryOtpUsed: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

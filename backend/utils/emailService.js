@@ -20,13 +20,26 @@ function getTransporter() {
 
 async function sendOtpEmail({ email, otp, purpose }) {
   const isRegistration = purpose === "registration";
+  const isDelivery = purpose === "delivery-verification";
   const action = isRegistration ? "complete your registration" : "reset your password";
-  const subject = isRegistration
-    ? "SmartStore registration OTP"
-    : "SmartStore password reset OTP";
+  const subject = isDelivery
+    ? "Delivery Verification OTP"
+    : isRegistration
+      ? "SmartStore registration OTP"
+      : "SmartStore password reset OTP";
 
-  const text = `Your SmartStore OTP is ${otp}. It is valid for 10 minutes. Do not share it with anyone.`;
-  const html = `
+  const text = isDelivery
+    ? `Your delivery verification OTP is ${otp}. It is valid for 10 minutes. Share this OTP only with the delivery person after receiving your order.`
+    : `Your SmartStore OTP is ${otp}. It is valid for 10 minutes. Do not share it with anyone.`;
+  const html = isDelivery
+    ? `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:16px">
+        <h2 style="color:#15803d">SmartStore</h2>
+        <p>Your delivery verification OTP is:</p>
+        <div style="font-size:32px;font-weight:700;letter-spacing:8px;background:#f0fdf4;color:#166534;padding:16px;text-align:center;border-radius:12px">${otp}</div>
+        <p style="color:#6b7280;font-size:13px">It is valid for 10 minutes. Share this OTP only with the delivery person after receiving your order.</p>
+      </div>`
+    : `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:16px">
         <h2 style="color:#15803d">SmartStore</h2>
         <p>Use this one-time password to ${action}:</p>
