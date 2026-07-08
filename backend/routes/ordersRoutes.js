@@ -6,6 +6,7 @@ const PDFDocument = require("pdfkit");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const DeliveryPartner = require("../models/DeliveryPartner");
+const { sendOtpEmail } = require("../utils/emailService");
 const authMiddleware = require("../middleware/authMiddleware");
 const allowRole = require("../middleware/roleMiddleware");
 const {
@@ -471,6 +472,121 @@ router.get(
           .populate("deliveryPartnerId", "name phone vehicleType")
           .sort({ createdAt: -1 }),
       );
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+
+const hashDeliveryOtp = (otp) => crypto.createHash("sha256").update(String(otp)).digest("hex");
+
+router.post(
+  "/:orderId/delivery-otp/request",
+  authMiddleware,
+  allowRole(["delivery_partner"]),
+  async (req, res, next) => {
+    try {
+      const order = await Order.findOne({
+        _id: req.params.orderId,
+        deliveryPartnerId: req.user.id,
+      }).populate("userId", "name email mobile");
+
+      if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+      if (order.status === "Delivered") {
+        return res.status(400).json({ success: false, message: "Order is already delivered" });
+      }
+
+      const customerEmail = order.userId?.email;
+      if (!customerEmail) {
+        return res.status(400).json({ success: false, message: "Customer email is not available for this order" });
+      }
+
+      const otp = crypto.randomInt(100000, 1000000).toString();
+      order.deliveryOtpHash = hashDeliveryOtp(otp);
+      order.deliveryOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      order.deliveryOtpVerifiedAt = null;
+      order.deliveryOtpUsed = false;
+      await order.save();
+
+      try {
+        await sendOtpEmail({ email: customerEmail, otp, purpose: "delivery-verification" });
+      } catch (error) {
+        order.deliveryOtpHash = null;
+        order.deliveryOtpExpiresAt = null;
+        order.deliveryOtpVerifiedAt = null;
+        order.deliveryOtpUsed = false;
+        await order.save();
+        throw error;
+      }
+
+      res.json({ success: true, message: "OTP sent to customer email" });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/:orderId/delivery-otp/verify",
+  authMiddleware,
+  allowRole(["delivery_partner"]),
+  async (req, res, next) => {
+    try {
+      const otp = String(req.body.otp || "").trim();
+      if (!/^\d{6}$/.test(otp)) {
+        return res.status(400).json({ success: false, message: "Enter a valid 6-digit OTP" });
+      }
+
+      const order = await Order.findOne({
+        _id: req.params.orderId,
+        deliveryPartnerId: req.user.id,
+      }).select("+deliveryOtpHash");
+
+      if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+      if (order.status === "Delivered") {
+        return res.status(400).json({ success: false, message: "Order is already delivered" });
+      }
+      if (!order.deliveryOtpHash || !order.deliveryOtpExpiresAt) {
+        return res.status(400).json({ success: false, message: "Delivery OTP was not requested" });
+      }
+      if (order.deliveryOtpUsed || order.deliveryOtpVerifiedAt) {
+        return res.status(400).json({ success: false, message: "Delivery OTP is already used" });
+      }
+      if (order.deliveryOtpExpiresAt.getTime() < Date.now()) {
+        return res.status(400).json({ success: false, message: "Delivery OTP has expired" });
+      }
+
+      const suppliedHash = Buffer.from(hashDeliveryOtp(otp), "hex");
+      const storedHash = Buffer.from(order.deliveryOtpHash, "hex");
+      if (suppliedHash.length !== storedHash.length || !crypto.timingSafeEqual(suppliedHash, storedHash)) {
+        return res.status(400).json({ success: false, message: "Invalid delivery OTP" });
+      }
+
+      order.deliveryOtpUsed = true;
+      order.deliveryOtpVerifiedAt = new Date();
+      order.status = "Delivered";
+      order.deliveredAt = new Date();
+      await order.save();
+
+      await Promise.all([
+        DeliveryPartner.findByIdAndUpdate(req.user.id, {
+          isAvailable: true,
+          currentOrderId: null,
+          location: null,
+        }),
+        createNotification({
+          recipientType: "user",
+          recipientId: order.userId,
+          title: "Delivery completed",
+          message: "Your order was delivered successfully.",
+          type: "status",
+          orderId: order._id,
+        }),
+      ]);
+
+      const safeOrder = await Order.findById(order._id).populate("deliveryPartnerId", "name phone vehicleType");
+      res.json({ success: true, message: "Delivery completed successfully", order: safeOrder });
     } catch (error) {
       next(error);
     }

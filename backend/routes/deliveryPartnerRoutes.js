@@ -145,7 +145,9 @@ router.put("/order/:orderId/status", verifyToken, async (req, res) => {
     if (req.user.role !== "delivery_partner") return res.status(403).json({ success: false, message: "Delivery access required" });
     const Order = require("../models/Order");
     const { status } = req.body;
-    const allowed = ["Out for Delivery", "Delivered"];
+    const allowed = ["Out for Delivery"];
+    if (status === "Delivered")
+      return res.status(400).json({ success: false, message: "Use delivery OTP verification to complete this order" });
     if (!allowed.includes(status))
       return res.status(400).json({ success: false, message: "Invalid status" });
 

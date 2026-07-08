@@ -103,6 +103,9 @@ export default function DeliveryDashboard() {
   const [serverLocation, setServerLocation] = useState(null); // what server stored
   const [showDebug, setShowDebug] = useState(true);
   const [lastPushed, setLastPushed] = useState(null);
+  const [otpInputs, setOtpInputs] = useState({});
+  const [otpRequested, setOtpRequested] = useState({});
+  const [otpLoading, setOtpLoading] = useState(null);
   const locationIntervalRef = useRef(null);
 
   const dpToken = localStorage.getItem("dp_token");
@@ -229,10 +232,44 @@ export default function DeliveryDashboard() {
       setUpdating(orderId);
       await API.put(`/delivery-partners/order/${orderId}/status`, { status });
       setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status } : o));
-    } catch {
-      alert("Failed to update status");
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to update status");
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const requestDeliveryOtp = async (orderId) => {
+    try {
+      setOtpLoading(orderId);
+      const { data } = await API.post(`/orders/${orderId}/delivery-otp/request`);
+      setOtpRequested(prev => ({ ...prev, [orderId]: true }));
+      alert(data?.message || "OTP sent to customer email");
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to send delivery OTP");
+    } finally {
+      setOtpLoading(null);
+    }
+  };
+
+  const verifyDeliveryOtp = async (orderId) => {
+    const otp = String(otpInputs[orderId] || "").trim();
+    if (!/^\d{6}$/.test(otp)) {
+      alert("Enter the 6-digit OTP from customer");
+      return;
+    }
+
+    try {
+      setOtpLoading(orderId);
+      const { data } = await API.post(`/orders/${orderId}/delivery-otp/verify`, { otp });
+      setOrders(prev => prev.map(o => o._id === orderId ? (data.order || { ...o, status: "Delivered" }) : o));
+      setOtpInputs(prev => ({ ...prev, [orderId]: "" }));
+      setOtpRequested(prev => ({ ...prev, [orderId]: false }));
+      alert(data?.message || "Delivery completed successfully");
+    } catch (err) {
+      alert(err.response?.data?.message || "Invalid or expired OTP");
+    } finally {
+      setOtpLoading(null);
     }
   };
 
@@ -487,12 +524,34 @@ export default function DeliveryDashboard() {
                           {updating === order._id ? "Updating..." : "Pick Up / Out for Delivery"}
                         </button>
                       ) : order.status === "Out for Delivery" ? (
-                        <button onClick={() => updateStatus(order._id, "Delivered")}
-                          disabled={updating === order._id}
-                          className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold transition disabled:opacity-50">
-                          <CheckCircle className="w-4 h-4" />
-                          {updating === order._id ? "Updating..." : "Mark as Delivered ✓"}
-                        </button>
+                        <div className="space-y-3">
+                          <button onClick={() => requestDeliveryOtp(order._id)}
+                            disabled={otpLoading === order._id}
+                            className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold transition disabled:opacity-50">
+                            <CheckCircle className="w-4 h-4" />
+                            {otpLoading === order._id ? "Sending OTP..." : "Send OTP to Customer"}
+                          </button>
+
+                          {otpRequested[order._id] && (
+                            <div className="bg-green-50 border border-green-100 rounded-xl p-3 space-y-2">
+                              <p className="text-xs font-semibold text-green-700">OTP sent. Ask customer for the 6-digit OTP after handing over the order.</p>
+                              <input
+                                value={otpInputs[order._id] || ""}
+                                onChange={(e) => setOtpInputs(prev => ({ ...prev, [order._id]: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                                inputMode="numeric"
+                                maxLength={6}
+                                placeholder="Enter customer OTP"
+                                className="w-full rounded-xl border border-green-200 px-3 py-3 text-center text-lg font-black tracking-[0.35em] outline-none focus:ring-2 focus:ring-green-300"
+                              />
+                              <button onClick={() => verifyDeliveryOtp(order._id)}
+                                disabled={otpLoading === order._id}
+                                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold transition disabled:opacity-50">
+                                <CheckCircle className="w-4 h-4" />
+                                {otpLoading === order._id ? "Verifying..." : "Verify OTP & Complete Delivery"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       ) : null}
                     </div>
                   </div>
