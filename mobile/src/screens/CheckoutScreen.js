@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TestId,
   View,
 } from "react-native";
 import Screen from "../components/Screen";

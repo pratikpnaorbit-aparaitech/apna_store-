@@ -24,6 +24,20 @@ const getPhone = (address) => {
   return typeof address.phone === "string" ? address.phone : "";
 };
 
+const getLocationLabel = (status) => {
+  if (status === "sharing") return { text: "Sharing Live", className: "text-green-600" };
+  if (status === "acquiring") return { text: "Getting GPS...", className: "text-orange-600" };
+  if (status === "error") return { text: "GPS issue", className: "text-red-600" };
+  return { text: "GPS ready", className: "text-slate-500" };
+};
+
+const getLocationErrorMessage = (error) => {
+  if (error?.code === 1) return "Location permission is blocked. Allow location access in browser site settings and try again.";
+  if (error?.code === 2) return "Current location is unavailable. Turn on GPS/Wi‑Fi/location services and try again.";
+  if (error?.code === 3) return "GPS request timed out. Move near a window, turn on location services, and try Refresh Location again.";
+  return error?.message || "Current location is unavailable. Turn on GPS and try again.";
+};
+
 // ── Mini map to show YOUR current GPS position ──
 function MiniMap({ lat, lng }) {
   const mapRef = useRef(null);
@@ -133,7 +147,7 @@ export default function DeliveryDashboard() {
   const startLocationSharing = () => {
     if (locationIntervalRef.current) return;
     if (!navigator.geolocation) { setLocationStatus("error"); return; }
-    setLocationStatus("sharing");
+    setLocationStatus("acquiring");
     setLocationError("");
     const stopTimer = () => {
       if (locationIntervalRef.current) {
@@ -147,6 +161,8 @@ export default function DeliveryDashboard() {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           setMyLocation({ lat, lng });
+          setLocationStatus("sharing");
+          setLocationError("");
           try {
             await API.put("/delivery-partners/location", { lat, lng });
             setLastPushed(new Date());
@@ -169,9 +185,7 @@ export default function DeliveryDashboard() {
         (error) => {
           stopTimer();
           setLocationStatus("error");
-          setLocationError(error.code === 1
-            ? "Location permission is blocked. Allow it in browser site settings."
-            : "Current location is unavailable. Turn on GPS and try again.");
+          setLocationError(getLocationErrorMessage(error));
         },
         { enableHighAccuracy: true, timeout: 10000 }
       );
@@ -192,11 +206,15 @@ export default function DeliveryDashboard() {
   // Manual one-time location test (even without active delivery)
   const testLocation = () => {
     if (!navigator.geolocation) { alert("GPS not available"); return; }
+    setLocationStatus("acquiring");
+    setLocationError("");
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setMyLocation({ lat, lng });
+        setLocationStatus("sharing");
+        setLocationError("");
         try {
           await API.put("/delivery-partners/location", { lat, lng });
           setLastPushed(new Date());
@@ -210,7 +228,12 @@ export default function DeliveryDashboard() {
           alert("❌ Failed to push location: " + err.message);
         }
       },
-      (err) => alert("❌ GPS error: " + err.message),
+      (err) => {
+        const message = getLocationErrorMessage(err);
+        setLocationStatus("error");
+        setLocationError(message);
+        alert("❌ GPS error: " + message);
+      },
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
@@ -286,6 +309,7 @@ export default function DeliveryDashboard() {
 
   const activeOrders = orders.filter(o => o.status !== "Delivered" && o.status !== "Cancelled");
   const completedOrders = orders.filter(o => o.status === "Delivered");
+  const locationLabel = getLocationLabel(locationStatus);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -333,7 +357,7 @@ export default function DeliveryDashboard() {
                 <Bug size={16} className="text-orange-500" />
                 <span className="font-bold text-orange-700 text-sm">Live Location</span>
               </div>
-              <span className="text-xs text-green-600 font-semibold">● {locationStatus === "sharing" ? "Sharing Live" : "GPS ready"}</span>
+              <span className={`text-xs font-semibold ${locationLabel.className}`}>● {locationLabel.text}</span>
             </div>
 
             <div className="p-4 space-y-4">
@@ -443,6 +467,18 @@ export default function DeliveryDashboard() {
                 Customer can see you on the map • Updates every 10s
                 {lastPushed && ` • Last: ${lastPushed.toLocaleTimeString()}`}
               </p>
+            </div>
+          </div>
+        )}
+
+        {locationStatus === "acquiring" && (
+          <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <FaMapMarkerAlt className="text-orange-600" size={16} />
+            </div>
+            <div>
+              <p className="font-bold text-orange-800 text-sm">📍 Getting live location</p>
+              <p className="text-xs text-orange-600">Please allow location permission if the browser asks.</p>
             </div>
           </div>
         )}
