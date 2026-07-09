@@ -5,6 +5,7 @@ import RootNavigator from "./src/navigation/RootNavigator";
 import { AuthProvider } from "./src/context/AuthContext";
 import { AddressProvider } from "./src/context/AddressContext";
 import { CartProvider } from "./src/context/CartContext";
+import { ToastProvider } from "./src/context/ToastContext";
 
 export default function App() {
   return (
@@ -12,10 +13,12 @@ export default function App() {
       <AuthProvider>
         <AddressProvider>
           <CartProvider>
-            <NavigationContainer>
-              <StatusBar style="dark" />
-              <RootNavigator />
-            </NavigationContainer>
+            <ToastProvider>
+              <NavigationContainer>
+                <StatusBar style="dark" />
+                <RootNavigator />
+              </NavigationContainer>
+            </ToastProvider>
           </CartProvider>
         </AddressProvider>
       </AuthProvider>
