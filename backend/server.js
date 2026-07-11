@@ -12,6 +12,8 @@ const storeRoutes = require("./routes/storeRoutes");
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 // Validate required environment variables
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
@@ -310,7 +312,7 @@ const startServer = async () => {
     });
 
     const PORT = process.env.PORT || 5000;
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`🔍 Health check: http://localhost:${PORT}/health`);
       console.log(`🛡️  Security: Helmet enabled, Rate limiting active`);

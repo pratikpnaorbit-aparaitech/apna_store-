@@ -38,7 +38,7 @@
       "expo-font"
     ],
     "extra": {
-      "apiUrl": "Set EXPO_PUBLIC_API_URL in .env",
+      "apiUrl": "https://apna-store-ol1t.onrender.com/api",
       "eas": {
         "projectId": "cf7f7c86-b60d-4e06-b7db-072b1ec6d7f8"
       }

@@ -4,6 +4,22 @@ const Product = require("../models/Product");
 const authMiddleware = require("../middleware/authMiddleware");
 const allowRoles = require("../middleware/roleMiddleware");
 
+const uploadUrl = (req, filename) => `${req.protocol}://${req.get("host")}/uploads/${encodeURIComponent(filename)}`;
+
+function productResponse(product, req) {
+  const data = product.toObject ? product.toObject() : product;
+  const imageUrl =
+    data.image_url && /^https?:\/\//i.test(data.image_url)
+      ? data.image_url
+      : data.image && /^https?:\/\//i.test(data.image)
+        ? data.image
+        : data.image
+          ? uploadUrl(req, data.image)
+          : data.image_url || null;
+
+  return { ...data, image_url: imageUrl };
+}
+
 /* =========================
    GET ALL PRODUCTS — public
    (user shopping frontend uses this)
@@ -20,7 +36,7 @@ router.get("/", async (req, res) => {
       .populate("storeId", "name categories")
       .sort({ is_featured: -1, created_at: -1 });
 
-    res.json(products);
+    res.json(products.map((product) => productResponse(product, req)));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -34,7 +50,7 @@ router.get("/category/:category", async (req, res) => {
     const category = decodeURIComponent(req.params.category);
     const products = await Product.find({ category, is_active: 1 })
       .populate("storeId", "name categories");
-    res.json(products);
+    res.json(products.map((product) => productResponse(product, req)));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -48,7 +64,7 @@ router.get("/:id", async (req, res) => {
     const product = await Product.findById(req.params.id)
       .populate("storeId", "name categories");
     if (!product) return res.status(404).json({ message: "Product not found" });
-    res.json(product);
+    res.json(productResponse(product, req));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

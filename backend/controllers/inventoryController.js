@@ -51,6 +51,25 @@ function normalize(p) {
   };
 }
 
+function imageFilenameFromInput(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (!/^https?:\/\//i.test(raw)) return raw;
+
+  try {
+    const url = new URL(raw);
+    const uploadMarker = "/uploads/";
+    const markerIndex = url.pathname.indexOf(uploadMarker);
+    if (markerIndex >= 0) {
+      return decodeURIComponent(url.pathname.slice(markerIndex + uploadMarker.length));
+    }
+  } catch {
+    return raw;
+  }
+
+  return raw;
+}
+
 /* =========================
    GET ALL PRODUCTS
 ========================= */
@@ -173,7 +192,7 @@ exports.addProduct = async (req, res) => {
       image: req.file
         ? req.file.filename
         : req.body.image_url
-          ? req.body.image_url.replace("http://localhost:5000/uploads/", "")
+          ? imageFilenameFromInput(req.body.image_url)
           : null,
     });
 
@@ -244,10 +263,7 @@ exports.updateProduct = async (req, res) => {
     if (req.file) {
       updateData.image = req.file.filename;
     } else if (req.body.image_url) {
-      updateData.image = req.body.image_url.replace(
-        "http://localhost:5000/uploads/",
-        "",
-      );
+      updateData.image = imageFilenameFromInput(req.body.image_url);
     }
 
     const updated = await Product.findByIdAndUpdate(req.params.id, updateData, {

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { api } from "../api/client";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { api, setUnauthorizedHandler } from "../api/client";
 import { authStorage } from "../utils/authStorage";
 
 const AuthContext = createContext(null);
@@ -22,6 +23,38 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authEpoch, setAuthEpoch] = useState(0);
 
+  const clearSession = async ({ markLoggedOut = true } = {}) => {
+    const authKeysToClear = [
+      "auth_token",
+      "auth_user",
+      "user_role",
+      "role",
+      "session_role",
+      "delivery_partner",
+      "delivery_partner_user",
+      "delivery_partner_token",
+      "delivery_token",
+    ];
+    const asyncKeysToClear = [
+      "smartstore_cart_v1",
+      "smartstore_addresses_v1",
+    ];
+
+    delete api.defaults.headers.common.Authorization;
+    setUser(null);
+    if (markLoggedOut) setAuthEpoch((value) => value + 1);
+
+    await Promise.all([
+      ...authKeysToClear.map((key) => authStorage.removeItem(key).catch(() => null)),
+      ...asyncKeysToClear.map((key) => AsyncStorage.removeItem(key).catch(() => null)),
+    ]);
+  };
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => clearSession({ markLoggedOut: true }));
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -41,9 +74,7 @@ export function AuthProvider({ children }) {
         setUser(data.user);
         await authStorage.setItem("auth_user", JSON.stringify(data.user));
       } catch {
-        await authStorage.removeItem("auth_token");
-        await authStorage.removeItem("auth_user");
-        setUser(null);
+        await clearSession({ markLoggedOut: false });
       } finally {
         setLoading(false);
       }
@@ -77,23 +108,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    // Flip auth state first so role-based navigation immediately remounts AuthStack.
-    // Storage cleanup still runs afterwards, but the user cannot remain on protected screens.
-    setAuthEpoch((value) => value + 1);
-    setUser(null);
-
-    const keysToClear = [
-      "auth_token",
-      "auth_user",
-      "user_role",
-      "role",
-      "session_role",
-      "delivery_partner",
-      "delivery_partner_user",
-      "delivery_partner_token",
-      "delivery_token",
-    ];
-    await Promise.all(keysToClear.map((key) => authStorage.removeItem(key).catch(() => null)));
+    await clearSession({ markLoggedOut: true });
   };
 
   const value = useMemo(() => ({ user, loading, authEpoch, login, loginDelivery, register, logout }), [user, loading, authEpoch]);
