@@ -50,7 +50,12 @@ api.interceptors.response.use(
   async (error) => {
     const status = error.response?.status;
     const hadAuthHeader = Boolean(error.config?.headers?.Authorization);
-    if ((status === 401 || status === 403) && hadAuthHeader && !error.config?._handledAuthFailure) {
+    const message = String(error.response?.data?.message || "").toLowerCase();
+    const tokenIsInvalid =
+      status === 401 ||
+      (status === 403 && (message.includes("invalid") || message.includes("expired token")));
+
+    if (tokenIsInvalid && hadAuthHeader && !error.config?._handledAuthFailure) {
       error.config._handledAuthFailure = true;
       if (unauthorizedHandler) await unauthorizedHandler();
     }

@@ -17,16 +17,27 @@ export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const cleanDeliveryPhone = phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
 
   const submit = async () => {
-    if (mode === "customer" && !emailPattern.test(email.trim())) return setError("Please enter a valid email address.");
-    if (mode === "delivery" && phone.trim().length < 6) return setError("Please enter your delivery phone number.");
-    if (!password) return setError("Password is required.");
+    if (loading) return;
+    const nextErrors = {};
+    if (mode === "customer" && !emailPattern.test(email.trim())) nextErrors.email = "Invalid email address.";
+    if (mode === "delivery" && cleanDeliveryPhone.length !== 10) nextErrors.phone = "Enter a valid 10-digit phone number.";
+    if (!password) nextErrors.password = "Password is required.";
+    else if (password.length < 4) nextErrors.password = "Password is too short.";
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setError("");
+      return;
+    }
     setLoading(true);
     setError("");
+    setFieldErrors({});
     try {
-      if (mode === "delivery") await loginDelivery(phone, password);
+      if (mode === "delivery") await loginDelivery(cleanDeliveryPhone, password);
       else await login(email, password);
     } catch (e) {
       setError(e.response ? messageFromError(e, mode === "delivery" ? "Wrong phone or password." : "Wrong email or password.") : e.message);
@@ -49,13 +60,13 @@ export default function LoginScreen({ navigation }) {
 
         {error ? <View style={styles.alert}><Ionicons name="alert-circle" size={18} color={colors.danger} /><Text style={styles.alertText}>{error}</Text></View> : null}
         {mode === "delivery" ? (
-          <Field label="Phone number" icon="call-outline" value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoComplete="tel" placeholder="Delivery phone" />
+          <Field label="Phone number" error={fieldErrors.phone} icon="call-outline" value={phone} onChangeText={(value) => { setPhone(value); setFieldErrors((old) => ({ ...old, phone: "" })); }} keyboardType="phone-pad" autoComplete="tel" placeholder="+91 98765 43210" />
         ) : (
-          <Field label="Email address" icon="mail-outline" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" placeholder="you@example.com" />
+          <Field label="Email address" error={fieldErrors.email} icon="mail-outline" value={email} onChangeText={(value) => { setEmail(value); setFieldErrors((old) => ({ ...old, email: "" })); }} keyboardType="email-address" autoComplete="email" placeholder="you@example.com" />
         )}
-        <Field label="Password" icon="lock-closed-outline" value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" placeholder="Enter your password" />
+        <Field label="Password" error={fieldErrors.password} icon="lock-closed-outline" value={password} onChangeText={(value) => { setPassword(value); setFieldErrors((old) => ({ ...old, password: "" })); }} secureTextEntry autoComplete="current-password" placeholder="Enter your password" />
         {mode === "customer" ? <Pressable onPress={() => navigation.navigate("ForgotPassword")}><Text style={styles.forgot}>Forgot password?</Text></Pressable> : null}
-        <PrimaryButton title={mode === "delivery" ? "Login as Delivery Boy" : "Login"} loading={loading} onPress={submit} style={{ marginTop: 23 }} />
+        <PrimaryButton title={mode === "delivery" ? "Login as Delivery Boy" : "Login"} loading={loading} disabled={loading} onPress={submit} style={{ marginTop: 23 }} />
         {mode === "customer" ? <><View style={styles.or}><View style={styles.line} /><Text style={styles.orText}>New to Smart Store?</Text><View style={styles.line} /></View><Pressable onPress={() => navigation.navigate("Register")} style={styles.create}><Text style={styles.createText}>Create an account</Text></Pressable></> : null}
       </ScrollView>
     </KeyboardAvoidingView>
