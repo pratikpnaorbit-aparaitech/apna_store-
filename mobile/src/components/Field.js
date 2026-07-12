@@ -1,37 +1,46 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { colors } from "../theme";
 
-export default function Field({ label, error, icon, secureTextEntry, ...props }) {
+function Field({ label, error, icon, secureTextEntry, inputStyle, onBlur, onFocus, autoCapitalize = "none", ...inputProps }) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
   const [focused, setFocused] = useState(false);
+
+  const handleFocus = useCallback((event) => {
+    setFocused(true);
+    onFocus?.(event);
+  }, [onFocus]);
+
+  const handleBlur = useCallback((event) => {
+    setFocused(false);
+    onBlur?.(event);
+  }, [onBlur]);
+
+  const toggleHidden = useCallback(() => setHidden((value) => !value), []);
+
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={[styles.field, focused && styles.fieldFocused, error && styles.fieldError]}>
         {icon ? <Ionicons name={icon} size={19} color={focused ? colors.success : colors.muted} /> : null}
         <TextInput
+          {...inputProps}
           placeholderTextColor="#A19AA9"
-          style={styles.input}
+          style={[styles.input, inputStyle]}
           secureTextEntry={hidden}
-          autoCapitalize="none"
-          onFocus={(event) => {
-            setFocused(true);
-            props.onFocus?.(event);
-          }}
-          onBlur={(event) => {
-            setFocused(false);
-            props.onBlur?.(event);
-          }}
-          {...props}
+          autoCapitalize={autoCapitalize}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
         />
-        {secureTextEntry ? <Pressable hitSlop={16} style={styles.eyeButton} onPress={() => setHidden(!hidden)}><Ionicons name={hidden ? "eye-outline" : "eye-off-outline"} size={21} color={colors.muted} /></Pressable> : null}
+        {secureTextEntry ? <Pressable hitSlop={16} style={styles.eyeButton} onPress={toggleHidden}><Ionicons name={hidden ? "eye-outline" : "eye-off-outline"} size={21} color={colors.muted} /></Pressable> : null}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
+
+export default memo(Field);
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 15 }, label: { color: colors.ink, fontSize: 13, fontWeight: "700", marginBottom: 7 },
