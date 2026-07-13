@@ -32,5 +32,8 @@
     "web": "expo start --web",
     "doctor": "expo-doctor"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "expo-doctor": "^1.20.0"
+  }
 }

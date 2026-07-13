@@ -6,13 +6,27 @@ const allowRoles = require("../middleware/roleMiddleware");
 
 const uploadUrl = (req, filename) => `${req.protocol}://${req.get("host")}/uploads/${encodeURIComponent(filename)}`;
 
+function normalizeStoredImageUrl(value, req) {
+  if (!value || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const url = new URL(value);
+    const localHost = ["localhost", "127.0.0.1", "0.0.0.0", "10.0.2.2"].includes(url.hostname);
+    if (!localHost) return value;
+    return url.pathname.startsWith("/uploads/")
+      ? `${req.protocol}://${req.get("host")}${url.pathname}`
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function productResponse(product, req) {
   const data = product.toObject ? product.toObject() : product;
   const imageUrl =
     data.image_url && /^https?:\/\//i.test(data.image_url)
-      ? data.image_url
+      ? normalizeStoredImageUrl(data.image_url, req)
       : data.image && /^https?:\/\//i.test(data.image)
-        ? data.image
+        ? normalizeStoredImageUrl(data.image, req)
         : data.image
           ? uploadUrl(req, data.image)
           : data.image_url || null;

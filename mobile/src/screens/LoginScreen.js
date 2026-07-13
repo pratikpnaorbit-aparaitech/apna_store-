@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useMemo, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Screen from "../components/Screen";
 import Field from "../components/Field";
 import PrimaryButton from "../components/PrimaryButton";
@@ -19,6 +19,8 @@ export default function LoginScreen({ navigation }) {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const identityRef = useRef(null);
+  const passwordRef = useRef(null);
   const cleanDeliveryPhone = useMemo(() => phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, ""), [phone]);
 
   const clearFieldError = useCallback((field) => {
@@ -58,6 +60,7 @@ export default function LoginScreen({ navigation }) {
       setError("");
       return;
     }
+    Keyboard.dismiss();
     setLoading(true);
     setError("");
     setFieldErrors({});
@@ -85,11 +88,11 @@ export default function LoginScreen({ navigation }) {
 
         {error ? <View style={styles.alert}><Ionicons name="alert-circle" size={18} color={colors.danger} /><Text style={styles.alertText}>{error}</Text></View> : null}
         {mode === "delivery" ? (
-          <Field label="Phone number" error={fieldErrors.phone} icon="call-outline" value={phone} onChangeText={updatePhone} keyboardType="phone-pad" inputMode="tel" autoComplete="tel" textContentType="telephoneNumber" placeholder="+91 98765 43210" maxLength={14} />
+          <Field ref={identityRef} label="Phone number" error={fieldErrors.phone} icon="call-outline" value={phone} onChangeText={updatePhone} keyboardType="phone-pad" inputMode="tel" autoComplete="tel" textContentType="telephoneNumber" placeholder="+91 98765 43210" maxLength={14} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => passwordRef.current?.focus()} />
         ) : (
-          <Field label="Email address" error={fieldErrors.email} icon="mail-outline" value={email} onChangeText={updateEmail} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" autoCorrect={false} placeholder="you@example.com" />
+          <Field ref={identityRef} label="Email address" error={fieldErrors.email} icon="mail-outline" value={email} onChangeText={updateEmail} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" autoCorrect={false} placeholder="you@example.com" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => passwordRef.current?.focus()} />
         )}
-        <Field label="Password" error={fieldErrors.password} icon="lock-closed-outline" value={password} onChangeText={updatePassword} secureTextEntry autoComplete="current-password" textContentType="password" placeholder="Enter your password" returnKeyType="go" onSubmitEditing={submit} />
+        <Field ref={passwordRef} label="Password" error={fieldErrors.password} icon="lock-closed-outline" value={password} onChangeText={updatePassword} secureTextEntry autoComplete="current-password" textContentType="password" placeholder="Enter your password" returnKeyType="go" onSubmitEditing={submit} />
         {mode === "customer" ? <Pressable onPress={() => navigation.navigate("ForgotPassword")}><Text style={styles.forgot}>Forgot password?</Text></Pressable> : null}
         <PrimaryButton title={mode === "delivery" ? "Login as Delivery Boy" : "Login"} loading={loading} disabled={loading} onPress={submit} style={{ marginTop: 23 }} />
         {mode === "customer" ? <><View style={styles.or}><View style={styles.line} /><Text style={styles.orText}>New to Smart Store?</Text><View style={styles.line} /></View><Pressable onPress={() => navigation.navigate("Register")} style={styles.create}><Text style={styles.createText}>Create an account</Text></Pressable></> : null}

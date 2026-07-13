@@ -9,6 +9,18 @@ const upload = require("../middleware/uploadMiddleware");
 const uploadOrigin = (req) => `${req.protocol}://${req.get("host")}`;
 const uploadUrl = (req, filename) => `${uploadOrigin(req)}/uploads/${encodeURIComponent(filename)}`;
 
+function normalizeStoredImageUrl(value, req) {
+  if (!value || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const url = new URL(value);
+    const localHost = ["localhost", "127.0.0.1", "0.0.0.0", "10.0.2.2"].includes(url.hostname);
+    if (!localHost) return value;
+    return url.pathname.startsWith("/uploads/") ? `${uploadOrigin(req)}${url.pathname}` : null;
+  } catch {
+    return null;
+  }
+}
+
 /* =========================
    HELPER — resolve image to a usable URL
    Priority:
@@ -19,11 +31,11 @@ const uploadUrl = (req, filename) => `${uploadOrigin(req)}/uploads/${encodeURICo
 function resolveImageUrl(p, req) {
   // New field: full URL pasted or from Cloudinary
   if (p.image_url && p.image_url.startsWith("http")) {
-    return p.image_url;
+    return normalizeStoredImageUrl(p.image_url, req);
   }
   // Old field: full URL somehow stored in image
   if (p.image && p.image.startsWith("http")) {
-    return p.image;
+    return normalizeStoredImageUrl(p.image, req);
   }
   // Old field: just a filename saved by multer locally
   if (p.image && !p.image.startsWith("http")) {
