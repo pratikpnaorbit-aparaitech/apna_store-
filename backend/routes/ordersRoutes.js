@@ -24,6 +24,30 @@ const ORDER_STATUSES = [
   "Delivered",
   "Cancelled",
 ];
+const CUSTOMER_CANCELLABLE_STATUSES = ["Placed", "Confirmed"];
+const DELIVERY_LOCKED_STATUSES = ["Out for Delivery", "Delivered"];
+
+function getCustomerCancellationBlock(order) {
+  if (!order) return { status: 404, message: "Order not found" };
+  if (order.status === "Cancelled")
+    return { status: 409, message: "Order is already cancelled." };
+  if (DELIVERY_LOCKED_STATUSES.includes(order.status))
+    return {
+      status: 409,
+      message: "Order cannot be cancelled because it has already been picked up for delivery.",
+    };
+  if (!CUSTOMER_CANCELLABLE_STATUSES.includes(order.status))
+    return {
+      status: 409,
+      message: "This order can no longer be cancelled because preparation or delivery has started",
+    };
+  if (order.paymentMethod === "Razorpay" && order.paymentStatus === "paid")
+    return {
+      status: 400,
+      message: "Paid online orders require refund assistance. Please contact support.",
+    };
+  return null;
+}
 
 function getRazorpay() {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -426,38 +450,51 @@ router.put(
   allowRole(["user"]),
   async (req, res, next) => {
     try {
-      const order = await Order.findOne({
-        _id: req.params.id,
-        userId: req.user.id,
-      });
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      if (order.status === "Cancelled")
-        return res.json({ success: true, order });
-      if (!["Placed", "Confirmed"].includes(order.status)) {
-        return res.status(400).json({
-          message:
-            "This order can no longer be cancelled because preparation or delivery has started",
-        });
-      }
-      if (
-        order.paymentMethod === "Razorpay" &&
-        order.paymentStatus === "paid"
-      ) {
-        return res.status(400).json({
-          message:
-            "Paid online orders require refund assistance. Please contact support.",
-        });
-      }
       const cancellationReason = String(req.body.reason || "").trim();
       if (cancellationReason.length < 3)
         return res
           .status(400)
           .json({ message: "Please provide a cancellation reason" });
-      order.status = "Cancelled";
-      order.cancellationReason = cancellationReason.slice(0, 500);
-      order.cancelledBy = "user";
-      order.cancelledAt = new Date();
-      if (order.paymentStatus === "pending") order.paymentStatus = "cancelled";
+
+      const currentOrder = await Order.findOne({
+        _id: req.params.id,
+        userId: req.user.id,
+      });
+      const initialBlock = getCustomerCancellationBlock(currentOrder);
+      if (initialBlock)
+        return res.status(initialBlock.status).json({ message: initialBlock.message });
+
+      const now = new Date();
+      const order = await Order.findOneAndUpdate(
+        {
+          _id: req.params.id,
+          userId: req.user.id,
+          status: { $in: CUSTOMER_CANCELLABLE_STATUSES },
+          $nor: [{ paymentMethod: "Razorpay", paymentStatus: "paid" }],
+        },
+        {
+          $set: {
+            status: "Cancelled",
+            cancellationReason: cancellationReason.slice(0, 500),
+            cancelledBy: "user",
+            cancelledAt: now,
+            ...(currentOrder.paymentStatus === "pending" ? { paymentStatus: "cancelled" } : {}),
+          },
+        },
+        { returnDocument: "after" },
+      );
+
+      if (!order) {
+        const latestOrder = await Order.findOne({
+          _id: req.params.id,
+          userId: req.user.id,
+        });
+        const latestBlock = getCustomerCancellationBlock(latestOrder);
+        return res.status(latestBlock?.status || 409).json({
+          message: latestBlock?.message || "Order status changed before cancellation. Please refresh and try again.",
+        });
+      }
+
       await restoreOrderStock(order);
       await order.save();
       if (order.deliveryPartnerId) {

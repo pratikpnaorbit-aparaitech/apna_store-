@@ -227,14 +227,27 @@ router.put("/order/:orderId/status", verifyToken, async (req, res) => {
         .json({ success: false, message: "Invalid status" });
 
     const order = await Order.findOneAndUpdate(
-      { _id: req.params.orderId, deliveryPartnerId: req.user.id },
+      {
+        _id: req.params.orderId,
+        deliveryPartnerId: req.user.id,
+        status: { $in: ["Confirmed", "Preparing"] },
+      },
       { status },
       { returnDocument: "after" },
     );
-    if (!order)
+    if (!order) {
+      const currentOrder = await Order.findOne({
+        _id: req.params.orderId,
+        deliveryPartnerId: req.user.id,
+      }).select("status");
+      if (!currentOrder)
+        return res
+          .status(404)
+          .json({ success: false, message: "Order not found" });
       return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
+        .status(409)
+        .json({ success: false, message: "Order status changed. Refresh your assigned orders before updating it." });
+    }
 
     if (status === "Delivered") {
       await DeliveryPartner.findByIdAndUpdate(req.user.id, {
