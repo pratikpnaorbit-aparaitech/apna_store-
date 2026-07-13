@@ -1,33 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
-import { forwardRef, memo, useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { colors } from "../theme";
 
-function Field({ label, error, icon, secureTextEntry, inputStyle, onBlur, onFocus, autoCapitalize = "none", ...inputProps }, forwardedRef) {
+function Field({ label, error, icon, secureTextEntry, inputStyle, autoCapitalize = "none", ...inputProps }, forwardedRef) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
   const inputRef = useRef(null);
-  const mountLabelRef = useRef(label || "unlabelled");
-
-  useEffect(() => {
-    console.log(`[AuthInput] Field mounted: ${mountLabelRef.current}`);
-    return () => console.log(`[AuthInput] Field unmounted: ${mountLabelRef.current}`);
-  }, []);
 
   const setInputRef = useCallback((node) => {
     inputRef.current = node;
     if (typeof forwardedRef === "function") forwardedRef(node);
     else if (forwardedRef) forwardedRef.current = node;
   }, [forwardedRef]);
-
-  const handleFocus = useCallback((event) => {
-    console.log(`[AuthInput] Field focused: ${label || "unlabelled"}`);
-    onFocus?.(event);
-  }, [label, onFocus]);
-
-  const handleBlur = useCallback((event) => {
-    console.log(`[AuthInput] Field blurred: ${label || "unlabelled"}`);
-    onBlur?.(event);
-  }, [label, onBlur]);
 
   const toggleHidden = useCallback(() => {
     setHidden((value) => !value);
@@ -46,8 +30,6 @@ function Field({ label, error, icon, secureTextEntry, inputStyle, onBlur, onFocu
           style={[styles.input, inputStyle]}
           secureTextEntry={hidden}
           autoCapitalize={autoCapitalize}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
         />
         {secureTextEntry ? (
           <Pressable

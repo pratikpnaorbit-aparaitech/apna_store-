@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Screen from "../components/Screen";
 import Field from "../components/Field";
@@ -22,11 +22,6 @@ export default function LoginScreen({ navigation }) {
   const identityRef = useRef(null);
   const passwordRef = useRef(null);
   const cleanDeliveryPhone = useMemo(() => phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, ""), [phone]);
-
-  useEffect(() => {
-    console.log("[AuthInput] LoginScreen mounted");
-    return () => console.log("[AuthInput] LoginScreen unmounted");
-  }, []);
 
   const clearFieldError = useCallback((field) => {
     setFieldErrors((old) => (old[field] ? { ...old, [field]: "" } : old));

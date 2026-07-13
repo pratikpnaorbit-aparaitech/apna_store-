@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useEffect } from "react";
 import { useAddress } from "../context/AddressContext";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -40,11 +39,6 @@ export default function RootNavigator() {
   const { user, loading, authEpoch } = useAuth();
   const { ready, selectedAddress } = useAddress();
   const { ready: cartReady } = useCart();
-
-  useEffect(() => {
-    console.log("[AuthInput] RootNavigator mounted");
-    return () => console.log("[AuthInput] RootNavigator unmounted");
-  }, []);
 
   if (loading || !ready || !cartReady) return <SplashScreen />;
   if (user?.role === "delivery_partner") return <DeliveryStack key={`delivery-session-${authEpoch}`} />;
