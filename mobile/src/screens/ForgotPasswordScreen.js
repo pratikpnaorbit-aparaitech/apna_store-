@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from "react-native";
 import Screen from "../components/Screen";
 import Field from "../components/Field";
@@ -14,6 +14,11 @@ export default function ForgotPasswordScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const passwordRef = useRef(null);
+
+  useEffect(() => {
+    console.log("[AuthInput] ForgotPasswordScreen mounted");
+    return () => console.log("[AuthInput] ForgotPasswordScreen unmounted");
+  }, []);
 
   const updateField = useCallback((key, value) => {
     setForm((current) => ({ ...current, [key]: value }));

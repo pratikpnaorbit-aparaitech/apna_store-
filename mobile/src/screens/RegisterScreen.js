@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import Screen from "../components/Screen";
 import Field from "../components/Field";
@@ -17,6 +17,11 @@ export default function RegisterScreen({ navigation }) {
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
   const confirmRef = useRef(null);
+
+  useEffect(() => {
+    console.log("[AuthInput] RegisterScreen mounted");
+    return () => console.log("[AuthInput] RegisterScreen unmounted");
+  }, []);
 
   const updateField = useCallback((key, value) => {
     setForm((current) => ({ ...current, [key]: value }));

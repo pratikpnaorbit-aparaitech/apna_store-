@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { useEffect } from "react";
 import { useAddress } from "../context/AddressContext";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -35,4 +36,17 @@ function AuthStack() { return <Stack.Navigator screenOptions={{ headerShown: fal
 function AppStack({ needsLocation }) { return <Stack.Navigator initialRouteName={needsLocation ? "Location" : "Main"} screenOptions={{ headerShown: false, animation: "slide_from_right" }}><Stack.Screen name="Main" component={MainTabs} /><Stack.Screen name="Location" component={LocationScreen} /><Stack.Screen name="Products" component={ProductsScreen} /><Stack.Screen name="ProductDetail" component={ProductDetailScreen} /><Stack.Screen name="Checkout" component={CheckoutScreen} /><Stack.Screen name="Orders" component={OrdersScreen} /><Stack.Screen name="OrderSuccess" component={OrderSuccessScreen} options={{ gestureEnabled: false }} /><Stack.Screen name="Stores" component={StoresScreen} /><Stack.Screen name="Payments" component={PaymentsScreen} /><Stack.Screen name="About" component={AboutScreen} /></Stack.Navigator>; }
 function DeliveryStack() { return <Stack.Navigator screenOptions={{ headerShown: false, animation: "slide_from_right" }}><Stack.Screen name="DeliveryDashboard" component={DeliveryDashboardScreen} /><Stack.Screen name="DeliveryOrderDetails" component={DeliveryOrderDetailsScreen} /></Stack.Navigator>; }
 
-export default function RootNavigator() { const { user, loading, authEpoch } = useAuth(); const { ready, selectedAddress } = useAddress(); const { ready: cartReady } = useCart(); if (loading || !ready || !cartReady) return <SplashScreen />; if (user?.role === "delivery_partner") return <DeliveryStack key={`delivery-session-${authEpoch}`} />; return user ? <AppStack key={`customer-session-${authEpoch}`} needsLocation={!selectedAddress} /> : <AuthStack key={`auth-session-${authEpoch}`} />; }
+export default function RootNavigator() {
+  const { user, loading, authEpoch } = useAuth();
+  const { ready, selectedAddress } = useAddress();
+  const { ready: cartReady } = useCart();
+
+  useEffect(() => {
+    console.log("[AuthInput] RootNavigator mounted");
+    return () => console.log("[AuthInput] RootNavigator unmounted");
+  }, []);
+
+  if (loading || !ready || !cartReady) return <SplashScreen />;
+  if (user?.role === "delivery_partner") return <DeliveryStack key={`delivery-session-${authEpoch}`} />;
+  return user ? <AppStack key={`customer-session-${authEpoch}`} needsLocation={!selectedAddress} /> : <AuthStack key={`auth-session-${authEpoch}`} />;
+}
