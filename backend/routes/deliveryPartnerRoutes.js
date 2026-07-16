@@ -3,6 +3,7 @@ const router = express.Router();
 const verifyToken = require("../middleware/authMiddleware");
 const allowRole = require("../middleware/roleMiddleware");
 const DeliveryPartner = require("../models/DeliveryPartner");
+const Order = require("../models/Order");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { createNotification } = require("../utils/inAppNotifications");
@@ -196,7 +197,6 @@ router.get("/my-orders", verifyToken, async (req, res) => {
       return res
         .status(403)
         .json({ success: false, message: "Delivery access required" });
-    const Order = require("../models/Order");
     const orders = await Order.find({ deliveryPartnerId: req.user.id })
       .sort({ createdAt: -1 })
       .populate("userId", "name mobile");
@@ -213,9 +213,8 @@ router.put("/order/:orderId/status", verifyToken, async (req, res) => {
       return res
         .status(403)
         .json({ success: false, message: "Delivery access required" });
-    const Order = require("../models/Order");
     const { status } = req.body;
-    const allowed = ["Out for Delivery"];
+    const allowed = ["Picked Up", "Out for Delivery"];
     if (status === "Delivered")
       return res.status(400).json({
         success: false,
@@ -226,11 +225,15 @@ router.put("/order/:orderId/status", verifyToken, async (req, res) => {
         .status(400)
         .json({ success: false, message: "Invalid status" });
 
+    const allowedPreviousStatuses =
+      status === "Picked Up"
+        ? ["Confirmed", "Preparing"]
+        : ["Confirmed", "Preparing", "Picked Up"];
     const order = await Order.findOneAndUpdate(
       {
         _id: req.params.orderId,
         deliveryPartnerId: req.user.id,
-        status: { $in: ["Confirmed", "Preparing"] },
+        status: { $in: allowedPreviousStatuses },
       },
       { status },
       { returnDocument: "after" },
@@ -301,6 +304,21 @@ router.put("/location", verifyToken, async (req, res) => {
     await DeliveryPartner.findByIdAndUpdate(req.user.id, {
       location: { lat: latitude, lng: longitude, updatedAt: new Date() },
     });
+    await Order.updateMany(
+      {
+        deliveryPartnerId: req.user.id,
+        status: { $in: ["Picked Up", "Out for Delivery"] },
+      },
+      {
+        $set: {
+          deliveryPartnerLocation: {
+            latitude,
+            longitude,
+            updatedAt: new Date(),
+          },
+        },
+      },
+    );
 
     res.json({ success: true });
   } catch (err) {

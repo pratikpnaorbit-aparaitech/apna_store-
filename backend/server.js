@@ -134,6 +134,8 @@ app.use('/api', limiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/register-app', authLimiter);
+app.use('/api/auth/send-registration-otp', authLimiter);
+app.use('/api/auth/verify-registration-otp', authLimiter);
 
 // Only apply SMS rate limiters if routes exist
 if (fs.existsSync(path.join(__dirname, 'routes', 'smsRoutes.js'))) {

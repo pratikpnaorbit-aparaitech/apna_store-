@@ -20,12 +20,49 @@ const ORDER_STATUSES = [
   "Placed",
   "Confirmed",
   "Preparing",
+  "Picked Up",
   "Out for Delivery",
   "Delivered",
   "Cancelled",
 ];
 const CUSTOMER_CANCELLABLE_STATUSES = ["Placed", "Confirmed"];
-const DELIVERY_LOCKED_STATUSES = ["Out for Delivery", "Delivered"];
+const DELIVERY_LOCKED_STATUSES = ["Picked Up", "Out for Delivery", "Delivered"];
+
+const TRACKING_STEPS = [
+  { key: "placed", label: "Order Placed" },
+  { key: "accepted", label: "Accepted" },
+  { key: "preparing", label: "Preparing" },
+  { key: "assigned", label: "Assigned Delivery Partner" },
+  { key: "pickedUp", label: "Picked Up" },
+  { key: "outForDelivery", label: "Out For Delivery" },
+  { key: "delivered", label: "Delivered" },
+];
+
+function buildTrackingTimeline(order) {
+  const statusRank = {
+    Placed: 0,
+    Confirmed: 1,
+    Preparing: 2,
+    "Picked Up": 4,
+    "Out for Delivery": 5,
+    Delivered: 6,
+  };
+  const rank = statusRank[order.status] ?? 0;
+  return TRACKING_STEPS.map((step, index) => ({
+    ...step,
+    completed:
+      order.status !== "Cancelled" &&
+      (index <= rank || (step.key === "assigned" && Boolean(order.deliveryPartnerId))),
+    current: order.status !== "Cancelled" && index === rank,
+  }));
+}
+
+function canAccessTracking(req, order) {
+  if (req.user.role === "user") return String(order.userId) === req.user.id;
+  if (req.user.role === "delivery_partner")
+    return String(order.deliveryPartnerId?._id || order.deliveryPartnerId || "") === req.user.id;
+  return req.user.role === "super_admin";
+}
 
 function getCustomerCancellationBlock(order) {
   if (!order) return { status: 404, message: "Order not found" };
@@ -436,7 +473,8 @@ router.get("/user/:userId", authMiddleware, async (req, res, next) => {
       return res.status(403).json({ message: "Forbidden" });
     res.json(
       await Order.find({ userId: req.params.userId })
-        .populate("deliveryPartnerId", "name phone vehicleType")
+        .select("-deliveryPartnerLocation")
+        .populate("deliveryPartnerId", "name phone vehicleType vehicleNumber")
         .sort({ createdAt: -1 }),
     );
   } catch (error) {
@@ -535,6 +573,67 @@ router.put(
     }
   },
 );
+
+router.get("/:id/tracking", authMiddleware, async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.id).populate(
+      "deliveryPartnerId",
+      "name phone vehicleType vehicleNumber",
+    );
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!canAccessTracking(req, order))
+      return res.status(403).json({ message: "Forbidden" });
+
+    const locationVisible = ["Picked Up", "Out for Delivery"].includes(order.status);
+    const safeOrder = order.toObject();
+    if (!locationVisible) delete safeOrder.deliveryPartnerLocation;
+    return res.json({
+      success: true,
+      order: safeOrder,
+      timeline: buildTrackingTimeline(order),
+      locationVisible,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/location", authMiddleware, async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.id).populate(
+      "deliveryPartnerId",
+      "name location vehicleType vehicleNumber",
+    );
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!canAccessTracking(req, order))
+      return res.status(403).json({ message: "Forbidden" });
+
+    const visible = ["Picked Up", "Out for Delivery"].includes(order.status);
+    if (!visible) {
+      return res.json({ success: true, visible: false, location: null });
+    }
+
+    const saved = order.deliveryPartnerLocation;
+    const fallback = order.deliveryPartnerId?.location;
+    const location = Number.isFinite(saved?.latitude) && Number.isFinite(saved?.longitude)
+      ? saved
+      : Number.isFinite(fallback?.lat) && Number.isFinite(fallback?.lng)
+        ? {
+            latitude: fallback.lat,
+            longitude: fallback.lng,
+            updatedAt: fallback.updatedAt,
+          }
+        : null;
+    return res.json({
+      success: true,
+      visible: true,
+      location,
+      customerLocation: order.customerLocation || null,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get(
   "/all",
@@ -838,9 +937,12 @@ router.put(
     try {
       const order = await Order.findByIdAndUpdate(
         req.params.id,
-        { deliveryPartnerId: req.body.deliveryPartnerId, status: "Confirmed" },
+        {
+          $set: { deliveryPartnerId: req.body.deliveryPartnerId, status: "Confirmed" },
+          $unset: { deliveryPartnerLocation: 1 },
+        },
         { returnDocument: "after" },
-      ).populate("deliveryPartnerId", "name phone vehicleType");
+      ).populate("deliveryPartnerId", "name phone vehicleType vehicleNumber");
       if (!order) return res.status(404).json({ message: "Order not found" });
       await DeliveryPartner.findByIdAndUpdate(req.body.deliveryPartnerId, {
         isAvailable: false,

@@ -102,16 +102,67 @@ export function AuthProvider({ children }) {
     await persistSession(data, normalizeDeliveryPartner(data.partner));
   };
 
-  const register = async (name, email, password) => {
-    const { data } = await api.post("/auth/register-app", { name: name.trim(), email: email.trim().toLowerCase(), password });
-    await persistSession(data, data.user);
+  const sendRegistrationOtp = async ({ name, email, phone, password }) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    try {
+      const { data } = await api.post("/auth/send-registration-otp", {
+        name: name.trim(),
+        email: normalizedEmail,
+        phone: phone.trim(),
+        password,
+      });
+      return data;
+    } catch (error) {
+      const routeIsMissing =
+        error.response?.status === 404 &&
+        /route not found/i.test(String(error.response?.data?.message || ""));
+      if (!routeIsMissing) throw error;
+      const { data } = await api.post("/auth/registration-otp", {
+        email: normalizedEmail,
+      });
+      return data;
+    }
+  };
+
+  const verifyRegistrationOtp = async ({ name, email, phone, password }, otp) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedOtp = String(otp).trim();
+    try {
+      const { data } = await api.post("/auth/verify-registration-otp", {
+        email: normalizedEmail,
+        otp: normalizedOtp,
+      });
+      await persistSession(data, data.user);
+      return data;
+    } catch (error) {
+      const routeIsMissing =
+        error.response?.status === 404 &&
+        /route not found/i.test(String(error.response?.data?.message || ""));
+      if (!routeIsMissing) throw error;
+      await api.post("/auth/register-user", {
+        name: name.trim(),
+        email: normalizedEmail,
+        mobile: phone.trim(),
+        password,
+        otp: normalizedOtp,
+      });
+      const { data } = await api.post("/auth/login", {
+        email: normalizedEmail,
+        password,
+      });
+      await persistSession(data, data.user);
+      return data;
+    }
   };
 
   const logout = async () => {
     await clearSession({ markLoggedOut: true });
   };
 
-  const value = useMemo(() => ({ user, loading, authEpoch, login, loginDelivery, register, logout }), [user, loading, authEpoch]);
+  const value = useMemo(
+    () => ({ user, loading, authEpoch, login, loginDelivery, sendRegistrationOtp, verifyRegistrationOtp, logout }),
+    [user, loading, authEpoch],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

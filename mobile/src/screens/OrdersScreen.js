@@ -147,7 +147,7 @@ export default function OrdersScreen({ navigation }) {
   };
 
   const askCancel = (order) => {
-    if (["Out for Delivery", "Delivered", "Cancelled"].includes(String(order.status || ""))) {
+    if (["Picked Up", "Out for Delivery", "Delivered", "Cancelled"].includes(String(order.status || ""))) {
       Alert.alert(
         "Order Can’t Be Cancelled",
         "Your order has already been picked up and is on the way. It can no longer be cancelled.",
@@ -236,7 +236,13 @@ export default function OrdersScreen({ navigation }) {
             const itemSummary = firstItem ? `${firstItem.name} × ${firstItem.quantity} ${firstItem.unit || "piece"}${items.length > 1 ? `  +${items.length - 1} more` : ""}` : "Order items unavailable";
 
             return (
-              <View key={order._id} style={styles.card}>
+              <Pressable
+                key={order._id}
+                onPress={() => navigation.navigate("OrderTracking", { orderId: order._id, order })}
+                style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel={`Track order ${String(order._id).slice(-6).toUpperCase()}`}
+              >
                 <View style={styles.orderTop}>
                   <View style={[styles.orderIcon, { backgroundColor: palette[0] }]}>
                     <Ionicons name="bag-handle-outline" size={20} color={palette[1]} />
@@ -270,7 +276,7 @@ export default function OrdersScreen({ navigation }) {
                   {canCancel ? (
                     <Pressable
                       disabled={cancelling === order._id}
-                      onPress={() => askCancel(order)}
+                      onPress={(event) => { event.stopPropagation(); askCancel(order); }}
                       style={({ pressed }) => [styles.cancel, pressed && styles.pressed, cancelling === order._id && styles.disabled]}
                       accessibilityRole="button"
                       accessibilityLabel="Cancel order"
@@ -279,7 +285,7 @@ export default function OrdersScreen({ navigation }) {
                     </Pressable>
                   ) : null}
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </ScrollView>}
