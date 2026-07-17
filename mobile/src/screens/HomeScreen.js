@@ -8,6 +8,7 @@ import ProductCard from "../components/ProductCard";
 import StateView from "../components/StateView";
 import { api, messageFromError } from "../api/client";
 import { useAddress } from "../context/AddressContext";
+import { useRequireAuth } from "../hooks/useRequireAuth";
 import { colors, getCategoryVisual, shadow } from "../theme";
 
 const banners = [
@@ -34,6 +35,7 @@ function CategoryImage({ category, fallback }) {
 export default function HomeScreen({ navigation }) {
   const { width: screenWidth } = useWindowDimensions();
   const { selectedAddress } = useAddress();
+  const requireAuth = useRequireAuth(navigation);
   const [products, setProducts] = useState([]);
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +113,7 @@ export default function HomeScreen({ navigation }) {
       >
         <LinearGradient colors={[colors.purpleDark, colors.purple]} style={styles.hero}>
           <View style={styles.top}>
-            <Pressable onPress={() => navigation.navigate("Location")} style={{ flex: 1 }}>
+            <Pressable onPress={() => requireAuth({ name: "Location" })} style={{ flex: 1 }}>
               <Text style={styles.time}>Delivery in 6 minutes ⚡</Text>
               <View style={styles.addressRow}>
                 <Ionicons name="location" size={14} color="rgba(255,255,255,.85)" />

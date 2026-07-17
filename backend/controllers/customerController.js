@@ -1,12 +1,25 @@
 const Customer = require("../models/Customer");
 const Transaction = require("../models/Transaction");
 
+function storeScope(req) {
+  return req.user.role === "super_admin" ? {} : { storeIds: req.user.storeId };
+}
+
+function ensureStore(req, res) {
+  if (req.user.role !== "super_admin" && !req.user.storeId) {
+    res.status(403).json({ message: "No store is assigned to this account" });
+    return false;
+  }
+  return true;
+}
+
 /* =========================
    GET CUSTOMER BY ID (DETAILS)
 ========================= */
 exports.getCustomerById = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    if (!ensureStore(req, res)) return;
+    const customer = await Customer.findOne({ _id: req.params.id, ...storeScope(req) });
 
     if (!customer) {
       return res.status(404).json({ 
@@ -17,7 +30,8 @@ exports.getCustomerById = async (req, res) => {
 
     // Get transactions for this customer
     const transactions = await Transaction.find({ 
-      customer_id: customer._id 
+      customer_id: customer._id,
+      ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
     }).sort({ created_at: -1 }).limit(10);
 
     // Calculate lifetime spent
@@ -70,13 +84,14 @@ exports.getCustomerById = async (req, res) => {
 ========================= */
 exports.checkCustomerByPhone = async (req, res) => {
   try {
+    if (!ensureStore(req, res)) return;
     const { phone } = req.query;
 
     if (!phone) {
       return res.json({ exists: false });
     }
 
-    const customer = await Customer.findOne({ phone });
+    const customer = await Customer.findOne({ phone, status: 'ACTIVE', ...storeScope(req) });
 
     if (!customer) {
       return res.json({ exists: false });
@@ -106,12 +121,14 @@ exports.checkCustomerByPhone = async (req, res) => {
 ========================= */
 exports.getAllCustomers = async (req, res) => {
   try {
-    const customers = await Customer.find({ status: 'ACTIVE' }).sort({ created_at: -1 });
+    if (!ensureStore(req, res)) return;
+    const customers = await Customer.find({ status: 'ACTIVE', ...storeScope(req) }).sort({ created_at: -1 });
 
     const customersWithSpent = await Promise.all(
       customers.map(async (customer) => {
         const transactions = await Transaction.find({ 
-          customer_id: customer._id 
+          customer_id: customer._id,
+          ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
         });
         
         const lifetimeSpent = transactions.reduce(
@@ -145,6 +162,7 @@ exports.getAllCustomers = async (req, res) => {
 ========================= */
 exports.enrollCustomer = async (req, res) => {
   try {
+    if (!ensureStore(req, res)) return;
     const { name, phone, email } = req.body;
 
     if (!name || !phone) {
@@ -155,9 +173,13 @@ exports.enrollCustomer = async (req, res) => {
 
     const existingCustomer = await Customer.findOne({ phone });
     if (existingCustomer) {
-      return res.status(400).json({
-        message: "Customer with this phone number already exists"
-      });
+      if (req.user.role === "super_admin" || existingCustomer.storeIds?.some((id) => String(id) === String(req.user.storeId))) {
+        return res.status(400).json({ message: "Customer with this phone number already exists" });
+      }
+      existingCustomer.storeIds.addToSet(req.user.storeId);
+      existingCustomer.status = 'ACTIVE';
+      await existingCustomer.save();
+      return res.json({ success: true, id: existingCustomer._id, loyalty_id: existingCustomer.loyalty_id, existing: true });
     }
 
     const loyaltyId = "LOY" + Date.now();
@@ -169,7 +191,8 @@ exports.enrollCustomer = async (req, res) => {
       email: email || null,
       points: 0,
       total_spent: 0,
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      storeIds: req.user.storeId ? [req.user.storeId] : [],
     });
 
     res.json({
@@ -194,8 +217,10 @@ exports.enrollCustomer = async (req, res) => {
 ========================= */
 exports.deleteCustomer = async (req, res) => {
   try {
+    if (!ensureStore(req, res)) return;
     const transactions = await Transaction.findOne({ 
-      customer_id: req.params.id 
+      customer_id: req.params.id,
+      ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
     });
 
     if (transactions) {
@@ -204,15 +229,19 @@ exports.deleteCustomer = async (req, res) => {
       });
     }
 
-    const customer = await Customer.findByIdAndUpdate(
-      req.params.id,
-      { status: 'INACTIVE' },
-      { returnDocument: "after" }
-    );
+    const customer = await Customer.findOne({ _id: req.params.id, ...storeScope(req) });
 
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
+
+    if (req.user.role === "super_admin") {
+      customer.status = 'INACTIVE';
+    } else {
+      customer.storeIds.pull(req.user.storeId);
+      if (!customer.storeIds.length) customer.status = 'INACTIVE';
+    }
+    await customer.save();
 
     res.json({ success: true });
 

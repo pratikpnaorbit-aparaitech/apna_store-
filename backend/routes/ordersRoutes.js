@@ -469,7 +469,10 @@ router.post(
 
 router.get("/user/:userId", authMiddleware, async (req, res, next) => {
   try {
-    if (req.user.role === "user" && req.user.id !== req.params.userId)
+    const canRead =
+      (req.user.role === "user" && req.user.id === req.params.userId) ||
+      req.user.role === "super_admin";
+    if (!canRead)
       return res.status(403).json({ message: "Forbidden" });
     res.json(
       await Order.find({ userId: req.params.userId })
@@ -898,6 +901,9 @@ router.put(
     try {
       if (!ORDER_STATUSES.includes(req.body.status))
         return res.status(400).json({ message: "Invalid status" });
+      if (req.body.status === "Delivered") {
+        return res.status(400).json({ message: "Delivery must be completed with OTP verification" });
+      }
       const update = { status: req.body.status };
       if (req.body.status === "Cancelled") {
         update.cancellationReason = String(
@@ -906,7 +912,13 @@ router.put(
         update.cancelledBy = req.user.role;
         update.cancelledAt = new Date();
       }
-      const order = await Order.findByIdAndUpdate(req.params.id, update, {
+      if (req.user.role !== "super_admin" && !req.user.storeId)
+        return res.status(403).json({ message: "No store is assigned to this account" });
+      const order = await Order.findOneAndUpdate({
+        _id: req.params.id,
+        status: { $nin: ["Delivered", "Cancelled"] },
+        ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
+      }, update, {
         returnDocument: "after",
       }).populate("deliveryPartnerId", "name phone vehicleType");
       if (!order) return res.status(404).json({ message: "Order not found" });
@@ -935,8 +947,28 @@ router.put(
   allowRole(["admin", "super_admin"]),
   async (req, res, next) => {
     try {
-      const order = await Order.findByIdAndUpdate(
-        req.params.id,
+      if (req.user.role !== "super_admin" && !req.user.storeId)
+        return res.status(403).json({ message: "No store is assigned to this account" });
+      const partner = await DeliveryPartner.findOne({
+        _id: req.body.deliveryPartnerId,
+        isActive: true,
+        isAvailable: true,
+        ...(req.user.role === "super_admin"
+          ? {}
+          : { $or: [{ storeId: req.user.storeId }, { storeId: null }] }),
+      });
+      if (!partner)
+        return res.status(400).json({ message: "Choose an active delivery partner available to this store" });
+      const currentOrder = await Order.findOne({
+        _id: req.params.id,
+        ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
+      }).select("deliveryPartnerId");
+      if (!currentOrder) return res.status(404).json({ message: "Order not found" });
+      const order = await Order.findOneAndUpdate(
+        {
+          _id: req.params.id,
+          ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
+        },
         {
           $set: { deliveryPartnerId: req.body.deliveryPartnerId, status: "Confirmed" },
           $unset: { deliveryPartnerLocation: 1 },
@@ -944,7 +976,13 @@ router.put(
         { returnDocument: "after" },
       ).populate("deliveryPartnerId", "name phone vehicleType vehicleNumber");
       if (!order) return res.status(404).json({ message: "Order not found" });
-      await DeliveryPartner.findByIdAndUpdate(req.body.deliveryPartnerId, {
+      if (currentOrder.deliveryPartnerId && String(currentOrder.deliveryPartnerId) !== String(partner._id)) {
+        await DeliveryPartner.findByIdAndUpdate(currentOrder.deliveryPartnerId, {
+          isAvailable: true,
+          currentOrderId: null,
+        });
+      }
+      await DeliveryPartner.findByIdAndUpdate(partner._id, {
         isAvailable: false,
         currentOrderId: req.params.id,
       });

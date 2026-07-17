@@ -16,7 +16,12 @@ router.get(
   allowRole(["super_admin", "admin"]),
   async (req, res) => {
     try {
-      const partners = await DeliveryPartner.find().sort({ createdAt: -1 });
+      if (req.user.role === "admin" && !req.user.storeId)
+        return res.status(403).json({ success: false, message: "No store is assigned to this account" });
+      const query = req.user.role === "admin"
+        ? { $or: [{ storeId: req.user.storeId }, { storeId: null }] }
+        : {};
+      const partners = await DeliveryPartner.find(query).sort({ createdAt: -1 });
       res.json({ success: true, count: partners.length, data: partners });
     } catch (err) {
       res
@@ -30,7 +35,7 @@ router.get(
 // @route POST /api/delivery-partners
 router.post("/", verifyToken, allowRole(["super_admin"]), async (req, res) => {
   try {
-    const { name, phone, email, vehicleType, vehicleNumber } = req.body;
+    const { name, phone, email, vehicleType, vehicleNumber, storeId } = req.body;
     if (!name || !phone)
       return res
         .status(400)
@@ -42,6 +47,7 @@ router.post("/", verifyToken, allowRole(["super_admin"]), async (req, res) => {
       email,
       vehicleType,
       vehicleNumber,
+      storeId: storeId || null,
       createdBy: req.user.id,
       isActive: true,
     });

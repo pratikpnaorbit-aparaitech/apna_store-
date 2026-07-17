@@ -1,12 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { useAuth } from "./AuthContext";
 
 const CartContext = createContext(null);
 const KEY = "smartstore_cart_v1";
 
 export function CartProvider({ children }) {
-  const { user, loading: authLoading, authEpoch } = useAuth();
   const [items, setItems] = useState([]);
   const [ready, setReady] = useState(false);
 
@@ -37,10 +35,6 @@ export function CartProvider({ children }) {
     return { ...item, quantity: Number.isFinite(stock) ? Math.min(nextQuantity, stock) : nextQuantity };
   }).filter((item) => item.quantity > 0));
   const clear = () => commit([]);
-  useEffect(() => {
-    if (!authLoading && !user) setItems([]);
-  }, [authLoading, user, authEpoch]);
-
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = items.reduce((sum, item) => sum + Number(item.discount_price ?? item.price) * item.quantity, 0);
 

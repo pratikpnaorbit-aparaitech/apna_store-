@@ -4,10 +4,12 @@ import Screen from "../components/Screen";
 import { useAuth } from "../context/AuthContext";
 import { useAddress } from "../context/AddressContext";
 import { colors, shadow } from "../theme";
+import { useRequireAuth } from "../hooks/useRequireAuth";
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
   const { addresses } = useAddress();
+  const requireAuth = useRequireAuth(navigation);
 
   const confirmLogout = () => Alert.alert("Logout", "Are you sure you want to logout?", [
     { text: "Cancel", style: "cancel" },
@@ -21,8 +23,8 @@ export default function ProfileScreen({ navigation }) {
   ]);
 
   const rows = [
-    { icon: "receipt-outline", title: "My orders", sub: "Track, cancel and review orders", onPress: () => navigation.navigate("Orders") },
-    { icon: "location-outline", title: "Saved addresses", sub: `${addresses.length} saved location${addresses.length === 1 ? "" : "s"}`, onPress: () => navigation.navigate("Location") },
+    { icon: "receipt-outline", title: "My orders", sub: "Track, cancel and review orders", onPress: () => requireAuth({ name: "Orders" }) },
+    { icon: "location-outline", title: "Saved addresses", sub: user ? `${addresses.length} saved location${addresses.length === 1 ? "" : "s"}` : "Login to manage delivery addresses", onPress: () => requireAuth({ name: "Location" }) },
     { icon: "card-outline", title: "Payments", sub: "COD, Razorpay and refunds", onPress: () => navigation.navigate("Payments") },
     { icon: "headset-outline", title: "Help & support", sub: "Chat with our support team", onPress: () => Linking.openURL("https://wa.me/919158852129?text=Hello%2C%20I%20need%20help%20with%20Smart%20Store.") },
     { icon: "information-circle-outline", title: "About Smart Store", sub: "Privacy, terms and app information", onPress: () => navigation.navigate("About") },
@@ -37,13 +39,20 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.profile}>
-          <View style={styles.avatar}><Text style={styles.initial}>{(user?.name || "U")[0].toUpperCase()}</Text></View>
+          <View style={styles.avatar}><Text style={styles.initial}>{(user?.name || "G")[0].toUpperCase()}</Text></View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.name}>{user?.name || "Smart Store User"}</Text>
-            <Text style={styles.email}>{user?.email || user?.mobile || "Customer account"}</Text>
+            <Text style={styles.name}>{user?.name || "Guest shopper"}</Text>
+            <Text style={styles.email}>{user?.email || user?.mobile || "Browse freely. Login only when needed."}</Text>
           </View>
-          <View style={styles.edit}><Ionicons name="shield-checkmark" size={17} color={colors.purple} /></View>
+          <View style={styles.edit}><Ionicons name={user ? "shield-checkmark" : "person-outline"} size={17} color={colors.purple} /></View>
         </View>
+
+        {!user ? (
+          <Pressable onPress={() => navigation.navigate("Login")} style={styles.login} accessibilityRole="button">
+            <Ionicons name="log-in-outline" size={19} color="white" />
+            <Text style={styles.loginText}>Login or create account</Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.member}>
           <View style={styles.memberIcon}><Ionicons name="flash" size={23} color="white" /></View>
@@ -63,10 +72,10 @@ export default function ProfileScreen({ navigation }) {
           ))}
         </View>
 
-        <Pressable onPress={confirmLogout} style={({ pressed }) => [styles.logout, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Logout">
+        {user ? <Pressable onPress={confirmLogout} style={({ pressed }) => [styles.logout, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Logout">
           <Ionicons name="log-out-outline" size={20} color={colors.danger} />
           <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
+        </Pressable> : null}
         <Text style={styles.version}>Smart Store v1.0.0</Text>
       </ScrollView>
     </Screen>
@@ -84,6 +93,8 @@ const styles = StyleSheet.create({
   name: { color: colors.ink, fontSize: 17, fontWeight: "900" },
   email: { color: colors.muted, fontSize: 11.5, marginTop: 4 },
   edit: { width: 38, height: 38, borderRadius: 14, backgroundColor: colors.purpleSoft, alignItems: "center", justifyContent: "center" },
+  login: { height: 54, borderRadius: 17, marginTop: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.purple, ...shadow },
+  loginText: { color: "white", fontWeight: "900" },
   member: { borderRadius: 20, backgroundColor: colors.purpleDark, padding: 15, flexDirection: "row", alignItems: "center", gap: 12, marginTop: 13, ...shadow },
   memberIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: "rgba(255,255,255,.16)", alignItems: "center", justifyContent: "center" },
   memberTitle: { color: "white", fontWeight: "900" },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { API } from "../../services/api";
 import { Upload, FileText, CheckCircle, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -6,16 +6,30 @@ import { useNavigate } from "react-router-dom";
 function BulkUploadInventory() {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [stores, setStores] = useState([]);
+  const [storeId, setStoreId] = useState("");
   const navigate = useNavigate();
+  const role = (() => { try { return JSON.parse(localStorage.getItem("user") || "{}").role; } catch { return ""; } })();
+  const isSuperAdmin = role === "super_admin";
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    API.get("/stores").then(({ data }) => setStores((data.data || []).filter(store => store.isActive))).catch(() => setStores([]));
+  }, [isSuperAdmin]);
 
   const handleUpload = async () => {
     if (!file) {
       alert("Please select a CSV file");
       return;
     }
+    if (isSuperAdmin && !storeId) {
+      alert("Please select the owning store");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
+    if (isSuperAdmin) formData.append("storeId", storeId);
 
     try {
       setLoading(true);
@@ -68,6 +82,15 @@ function BulkUploadInventory() {
         </div>
 
         {/* File Upload */}
+        {isSuperAdmin && (
+          <div className="mb-6">
+            <label className="mb-2 block text-sm font-semibold text-gray-700">Owning store</label>
+            <select value={storeId} onChange={event => setStoreId(event.target.value)} className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3">
+              <option value="">Select a store</option>
+              {stores.map(store => <option key={store._id} value={store._id}>{store.name}</option>)}
+            </select>
+          </div>
+        )}
         <div className="border-2 border-dashed rounded-xl p-6 text-center hover:border-blue-400 transition">
           <input
             type="file"

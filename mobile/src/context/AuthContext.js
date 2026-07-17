@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api, setUnauthorizedHandler } from "../api/client";
 import { authStorage } from "../utils/authStorage";
+import { isKnownRole, USER_ACCOUNT_ROLES } from "../navigation/roleConfig";
 
 const AuthContext = createContext(null);
 
@@ -22,8 +23,9 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authEpoch, setAuthEpoch] = useState(0);
+  const [pendingIntent, setPendingIntent] = useState(null);
 
-  const clearSession = async ({ markLoggedOut = true } = {}) => {
+  const clearSession = useCallback(async ({ markLoggedOut = true } = {}) => {
     const authKeysToClear = [
       "auth_token",
       "auth_user",
@@ -35,25 +37,23 @@ export function AuthProvider({ children }) {
       "delivery_partner_token",
       "delivery_token",
     ];
-    const asyncKeysToClear = [
-      "smartstore_cart_v1",
-      "smartstore_addresses_v1",
-    ];
+    const asyncKeysToClear = ["smartstore_addresses_v1"];
 
     delete api.defaults.headers.common.Authorization;
     setUser(null);
+    setPendingIntent(null);
     if (markLoggedOut) setAuthEpoch((value) => value + 1);
 
     await Promise.all([
       ...authKeysToClear.map((key) => authStorage.removeItem(key).catch(() => null)),
       ...asyncKeysToClear.map((key) => AsyncStorage.removeItem(key).catch(() => null)),
     ]);
-  };
+  }, []);
 
   useEffect(() => {
     setUnauthorizedHandler(() => clearSession({ markLoggedOut: true }));
     return () => setUnauthorizedHandler(null);
-  }, []);
+  }, [clearSession]);
 
   useEffect(() => {
     (async () => {
@@ -62,7 +62,7 @@ export function AuthProvider({ children }) {
         const cached = await authStorage.getItem("auth_user");
         if (!token) return;
         const cachedUser = cached ? JSON.parse(cached) : null;
-        if (cachedUser) setUser(cachedUser);
+        if (cachedUser && isKnownRole(cachedUser.role)) setUser(cachedUser);
 
         if (cachedUser?.role === "delivery_partner") {
           await api.get("/delivery-partners/my-orders");
@@ -71,6 +71,7 @@ export function AuthProvider({ children }) {
         }
 
         const { data } = await api.get("/auth/me");
+        if (!USER_ACCOUNT_ROLES.includes(data.user?.role)) throw new Error("Unsupported account role");
         setUser(data.user);
         await authStorage.setItem("auth_user", JSON.stringify(data.user));
       } catch {
@@ -81,26 +82,41 @@ export function AuthProvider({ children }) {
     })();
   }, []);
 
-  const persistSession = async (data, sessionUser = data.user) => {
+  const persistSession = useCallback(async (data, sessionUser = data.user) => {
+    if (!data.token || !sessionUser || !isKnownRole(sessionUser.role)) {
+      throw new Error("The server returned an unsupported account session.");
+    }
     await authStorage.setItem("auth_token", data.token);
     await authStorage.setItem("auth_user", JSON.stringify(sessionUser));
     await authStorage.setItem("user_role", sessionUser?.role || "user");
     await authStorage.setItem("role", sessionUser?.role || "user");
     setAuthEpoch((value) => value + 1);
     setUser(sessionUser);
-  };
+    return sessionUser;
+  }, []);
 
-  const login = async (email, password) => {
-    const { data } = await api.post("/auth/login", { email: email.trim().toLowerCase(), password });
-    if (data.user?.role !== "user") throw new Error("Please use a customer account in this app.");
-    await persistSession(data, data.user);
-  };
-
-  const loginDelivery = async (phone, password) => {
+  const loginDelivery = useCallback(async (phone, password) => {
     const { data } = await api.post("/delivery-partners/login", { phone: phone.trim(), password });
     if (!data.token || !data.partner) throw new Error("Delivery login failed. Please try again.");
-    await persistSession(data, normalizeDeliveryPartner(data.partner));
-  };
+    return persistSession(data, normalizeDeliveryPartner(data.partner));
+  }, [persistSession]);
+
+  const login = useCallback(async (identifier, password) => {
+    const normalized = String(identifier || "").trim();
+    if (normalized.includes("@")) {
+      const { data } = await api.post("/auth/login", {
+        email: normalized.toLowerCase(),
+        password,
+      });
+      if (!USER_ACCOUNT_ROLES.includes(data.user?.role)) {
+        throw new Error("This account role is not supported.");
+      }
+      return persistSession(data, data.user);
+    }
+
+    const phone = normalized.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
+    return loginDelivery(phone, password);
+  }, [loginDelivery, persistSession]);
 
   const sendRegistrationOtp = async ({ name, email, phone, password }) => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -159,9 +175,28 @@ export function AuthProvider({ children }) {
     await clearSession({ markLoggedOut: true });
   };
 
+  const requestAuthentication = useCallback((intent) => {
+    if (!intent?.name) return;
+    setPendingIntent({ name: intent.name, params: intent.params });
+  }, []);
+
+  const clearPendingIntent = useCallback(() => setPendingIntent(null), []);
+
   const value = useMemo(
-    () => ({ user, loading, authEpoch, login, loginDelivery, sendRegistrationOtp, verifyRegistrationOtp, logout }),
-    [user, loading, authEpoch],
+    () => ({
+      user,
+      loading,
+      authEpoch,
+      pendingIntent,
+      login,
+      loginDelivery,
+      sendRegistrationOtp,
+      verifyRegistrationOtp,
+      logout,
+      requestAuthentication,
+      clearPendingIntent,
+    }),
+    [authEpoch, clearPendingIntent, login, loginDelivery, loading, pendingIntent, requestAuthentication, user],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

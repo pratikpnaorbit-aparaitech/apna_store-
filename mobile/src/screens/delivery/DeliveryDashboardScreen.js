@@ -185,8 +185,8 @@ export default function DeliveryDashboardScreen({ navigation }) {
     setLogoutLoading(true);
     stopLocationSharing();
 
-    // AuthContext sets user=null immediately; RootNavigator then remounts AuthStack(Login)
-    // with a new key, so Android/iOS back cannot return to DeliveryDashboard.
+    // AuthContext sets user=null immediately; RootNavigator then remounts the guest
+    // customer stack, so Android/iOS back cannot return to DeliveryDashboard.
     await logout();
   };
 

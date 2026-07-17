@@ -9,11 +9,14 @@ const createSuperAdmin = async () => {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('✅ Connected to MongoDB');
 
-    // 2️⃣ Define super admin details
+    // 2️⃣ Read bootstrap credentials from the environment. Never ship defaults.
+    if (!process.env.SUPER_ADMIN_EMAIL || !process.env.SUPER_ADMIN_PASSWORD) {
+      throw new Error('SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD are required');
+    }
     const superAdminData = {
-      name: 'Super Admin',
-      email: 'superadmin@example.com',
-      password: 'SuperAdmin@123',  // You can change this
+      name: process.env.SUPER_ADMIN_NAME || 'Super Admin',
+      email: process.env.SUPER_ADMIN_EMAIL.trim().toLowerCase(),
+      password: process.env.SUPER_ADMIN_PASSWORD,
       role: 'super_admin',
       isActive: true,
       permissions: ['manage_users', 'manage_roles', 'delete_data', 'export_data', 'view_reports']
@@ -38,10 +41,9 @@ const createSuperAdmin = async () => {
       password: hashedPassword
     });
 
-    // 6️⃣ Show success message with credentials
+    // 6️⃣ Confirm creation without printing credentials or hashes.
     console.log('✅ Super admin created successfully!');
     console.log('📧 Email:', superAdminData.email);
-    console.log('🔑 Password:', superAdminData.password);
     console.log('👤 Role:', superAdmin.role);
     console.log('🆔 User ID:', superAdmin._id);
 

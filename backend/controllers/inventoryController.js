@@ -1,33 +1,43 @@
 const Product = require("../models/Product");
 const User = require("../models/User");
+const Store = require("../models/Store");
+
+function scopedProductFilter(req, filter = {}) {
+  if (req.user.role === "super_admin") return filter;
+  return { ...filter, storeId: req.user.storeId || null };
+}
 
 /* ── helpers ── */
 function calcExpiry(p) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
-  const sevenDays = new Date(today);
-  sevenDays.setDate(sevenDays.getDate() + 7);
-
   let expiryStatus = "SAFE",
     discountPercent = 0;
 
   if (p.expiry_date) {
     const exp = new Date(p.expiry_date);
     exp.setHours(0, 0, 0, 0);
+    const daysLeft = Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
 
-    if (exp < today) {
+    if (daysLeft <= 0) {
       expiryStatus = "EXPIRED";
-    } else if (exp <= sevenDays) {
+    } else if (daysLeft <= 7) {
       expiryStatus = "NEAR_EXPIRY";
-      discountPercent = 15;
+      discountPercent = daysLeft <= 1 ? 50 : daysLeft <= 3 ? 30 : 15;
     }
   }
 
   return { expiryStatus, discountPercent };
 }
 
-function normalize(p) {
+function resolvedImageUrl(p, req) {
+  const stored = p.image_url || p.image;
+  if (!stored) return null;
+  if (/^https?:\/\//i.test(stored)) return stored;
+  return `${req.protocol}://${req.get("host")}/uploads/${encodeURIComponent(stored)}`;
+}
+
+function normalize(p, req) {
   const { expiryStatus, discountPercent } = calcExpiry(p);
 
   return {
@@ -45,6 +55,7 @@ function normalize(p) {
     storeId: p.storeId,
     createdBy: p.createdBy,
     image: p.image || null,
+    image_url: resolvedImageUrl(p, req),
     expiryStatus,
     discountPercent,
     isLowStock: Number(p.stock) <= (p.reorder_level ?? 5),
@@ -98,7 +109,7 @@ exports.getAllProducts = async (req, res) => {
       .populate("createdBy", "name")
       .sort({ created_at: -1 });
 
-    res.json(products.map(normalize));
+    res.json(products.map((product) => normalize(product, req)));
   } catch (err) {
     console.error("FETCH INVENTORY ERROR:", err);
     res.status(500).json({ message: "Failed to fetch inventory" });
@@ -110,16 +121,16 @@ exports.getAllProducts = async (req, res) => {
 ========================= */
 exports.getProductById = async (req, res) => {
   try {
-    const product = await Product.findOne({
+    const product = await Product.findOne(scopedProductFilter(req, {
       _id: req.params.id,
       is_active: 1,
-    });
+    }));
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    res.json(normalize(product));
+    res.json(normalize(product, req));
   } catch (err) {
     console.error("FETCH PRODUCT ERROR:", err);
 
@@ -162,8 +173,13 @@ exports.addProduct = async (req, res) => {
     }
 
     const user = await User.findById(req.user.id).select("storeId role");
-
-    const storeId = user?.storeId || null;
+    const storeId = user?.role === "super_admin" ? req.body.storeId : user?.storeId;
+    if (!storeId) {
+      return res.status(400).json({ message: "A store is required for this product" });
+    }
+    if (!(await Store.exists({ _id: storeId, isActive: true }))) {
+      return res.status(400).json({ message: "Choose a valid active store" });
+    }
 
     const newProduct = await Product.create({
       name,
@@ -233,6 +249,12 @@ exports.updateProduct = async (req, res) => {
   } = req.body;
 
   try {
+    const target = await Product.findOne(scopedProductFilter(req, {
+      _id: req.params.id,
+      is_active: 1,
+    })).select("_id");
+    if (!target) return res.status(404).json({ message: "Product not found" });
+
     if (sku) {
       const existing = await Product.findOne({
         sku,
@@ -266,7 +288,7 @@ exports.updateProduct = async (req, res) => {
       updateData.image = imageFilenameFromInput(req.body.image_url);
     }
 
-    const updated = await Product.findByIdAndUpdate(req.params.id, updateData, {
+    const updated = await Product.findOneAndUpdate(scopedProductFilter(req, { _id: req.params.id }), updateData, {
       returnDocument: "after",
       runValidators: true,
     });
@@ -294,8 +316,8 @@ exports.updateProduct = async (req, res) => {
 ========================= */
 exports.archiveProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
+    const product = await Product.findOneAndUpdate(
+      scopedProductFilter(req, { _id: req.params.id }),
       { is_active: 0 },
       { returnDocument: "after" },
     );

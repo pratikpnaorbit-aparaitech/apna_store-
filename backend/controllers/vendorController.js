@@ -1,11 +1,15 @@
 const Vendor = require("../models/Vendor");
 
+const scopeFor = (req) => req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
+const hasStore = (req) => req.user.role === "super_admin" || Boolean(req.user.storeId);
+
 /* =========================
    GET ALL VENDORS
 ========================= */
 exports.getVendors = async (req, res) => {
   try {
-    const vendors = await Vendor.find().sort({ createdAt: -1 });
+    if (!hasStore(req)) return res.status(403).json({ message: "No store is assigned to this account" });
+    const vendors = await Vendor.find(scopeFor(req)).sort({ createdAt: -1 });
 
     // Convert MongoDB _id to id for frontend
     const vendorsList = vendors.map(v => ({
@@ -21,7 +25,8 @@ exports.getVendors = async (req, res) => {
       address: v.address,
       createdBy: v.createdBy,
       createdAt: v.createdAt,
-      updatedAt: v.updatedAt
+      updatedAt: v.updatedAt,
+      storeId: v.storeId,
     }));
 
     res.json(vendorsList);            // ✅ send array directly
@@ -54,6 +59,7 @@ exports.addVendor = async (req, res) => {
   }
 
   try {
+    if (!hasStore(req)) return res.status(403).json({ success: false, message: "No store is assigned to this account" });
     // Create new vendor
     const vendor = await Vendor.create({
       company_name,
@@ -64,7 +70,8 @@ exports.addVendor = async (req, res) => {
       account_manager: account_manager || null,
       payment_due: payment_due || 0,
       address: address || null,
-      createdBy: req.user?.id // If you have user info from token
+      createdBy: req.user?.id,
+      storeId: req.user.role === "super_admin" ? (req.body.storeId || null) : req.user.storeId,
     });
 
     res.status(201).json({
@@ -97,12 +104,13 @@ exports.addVendor = async (req, res) => {
 ========================= */
 exports.updateVendor = async (req, res) => {
   const { id } = req.params;
-  const updateData = req.body;
+  const { storeId: _ignoredStoreId, createdBy: _ignoredCreatedBy, ...updateData } = req.body;
 
   try {
+    if (!hasStore(req)) return res.status(403).json({ success: false, message: "No store is assigned to this account" });
     // Find vendor by ID and update
-    const vendor = await Vendor.findByIdAndUpdate(
-      id,
+    const vendor = await Vendor.findOneAndUpdate(
+      { _id: id, ...scopeFor(req) },
       updateData,
       { 
         returnDocument: "after", // Return the updated document
@@ -149,7 +157,8 @@ exports.deleteVendor = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const vendor = await Vendor.findByIdAndDelete(id);
+    if (!hasStore(req)) return res.status(403).json({ success: false, message: "No store is assigned to this account" });
+    const vendor = await Vendor.findOneAndDelete({ _id: id, ...scopeFor(req) });
 
     if (!vendor) {
       return res.status(404).json({

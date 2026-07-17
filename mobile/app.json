@@ -31,12 +31,21 @@
     "plugins": [
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Smart Store to choose store cover and product images.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Allow Smart Store to use your location for nearby stores and delivery."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-sharing"
     ],
     "extra": {
       "apiUrl": "https://apna-store-ol1t.onrender.com/api",
