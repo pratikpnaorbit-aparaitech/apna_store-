@@ -19,8 +19,12 @@ router.post("/:id/refund", verifyToken, allowRole(["admin", "super_admin"]), asy
   session.startTransaction();
 
   try {
+    if (req.user.role === "admin" && !req.user.storeId) throw new Error("No store is assigned to this account");
     // Find transaction with lock (using session)
-    const transaction = await Transaction.findById(id).session(session);
+    const transaction = await Transaction.findOne({
+      _id: id,
+      ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
+    }).session(session);
     if (!transaction) throw new Error("Transaction not found");
     if (transaction.status !== "SUCCESS") throw new Error("Bill already refunded or invalid");
 
@@ -31,7 +35,7 @@ router.post("/:id/refund", verifyToken, allowRole(["admin", "super_admin"]), asy
     // Restore stock for each item
     for (const item of items) {
       await Product.updateOne(
-        { _id: item.product_id },
+        { _id: item.product_id, ...(transaction.storeId ? { storeId: transaction.storeId } : {}) },
         { $inc: { stock: item.quantity } }
       ).session(session);
 

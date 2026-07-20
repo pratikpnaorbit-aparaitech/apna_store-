@@ -47,7 +47,11 @@ const customerSchema = new mongoose.Schema({
         type: String,
         enum: ['ACTIVE', 'INACTIVE'],
         default: 'ACTIVE'
-    }
+    },
+    storeIds: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Store'
+    }]
 }, {
     timestamps: { 
         createdAt: 'created_at', 

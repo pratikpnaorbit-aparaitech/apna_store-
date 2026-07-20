@@ -49,6 +49,11 @@ const vendorSchema = new mongoose.Schema({
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
+    },
+    storeId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Store',
+        default: null
     }
 }, {
     timestamps: true // This adds created_at and updated_at automatically

@@ -6,6 +6,21 @@ const inventoryController = require("../controllers/inventoryController");
 const Product = require("../models/Product");
 const upload = require("../middleware/uploadMiddleware");
 
+const uploadOrigin = (req) => `${req.protocol}://${req.get("host")}`;
+const uploadUrl = (req, filename) => `${uploadOrigin(req)}/uploads/${encodeURIComponent(filename)}`;
+
+function normalizeStoredImageUrl(value, req) {
+  if (!value || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const url = new URL(value);
+    const localHost = ["localhost", "127.0.0.1", "0.0.0.0", "10.0.2.2"].includes(url.hostname);
+    if (!localHost) return value;
+    return url.pathname.startsWith("/uploads/") ? `${uploadOrigin(req)}${url.pathname}` : null;
+  } catch {
+    return null;
+  }
+}
+
 /* =========================
    HELPER — resolve image to a usable URL
    Priority:
@@ -13,18 +28,18 @@ const upload = require("../middleware/uploadMiddleware");
    2. image field — filename from old multer upload (e.g. product_123.jpg)
    3. null — no image
 ========================= */
-function resolveImageUrl(p) {
+function resolveImageUrl(p, req) {
   // New field: full URL pasted or from Cloudinary
   if (p.image_url && p.image_url.startsWith("http")) {
-    return p.image_url;
+    return normalizeStoredImageUrl(p.image_url, req);
   }
   // Old field: full URL somehow stored in image
   if (p.image && p.image.startsWith("http")) {
-    return p.image;
+    return normalizeStoredImageUrl(p.image, req);
   }
   // Old field: just a filename saved by multer locally
   if (p.image && !p.image.startsWith("http")) {
-    return `http://localhost:5000/uploads/${p.image}`;
+    return uploadUrl(req, p.image);
   }
   return null;
 }
@@ -62,7 +77,7 @@ router.get("/public", async (req, res) => {
         is_featured: p.is_featured,
         storeId: p.storeId,
         description: p.description || null,
-        image_url: resolveImageUrl(p),
+        image_url: resolveImageUrl(p, req),
       })),
     );
   } catch (err) {
@@ -97,7 +112,7 @@ router.get("/public/:id", async (req, res) => {
       is_active: product.is_active,
       storeId: product.storeId,
       description: product.description || null,
-      image_url: resolveImageUrl(product),
+      image_url: resolveImageUrl(product, req),
     });
   } catch (err) {
     console.error(err);
@@ -124,7 +139,7 @@ router.post(
     const imageUrl =
       req.file.path && req.file.path.startsWith("http")
         ? req.file.path
-        : `http://localhost:5000/uploads/${req.file.filename}`;
+        : uploadUrl(req, req.file.filename);
 
     res.json({
       success: true,

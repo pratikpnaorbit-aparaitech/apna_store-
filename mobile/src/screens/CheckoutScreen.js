@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Screen from "../components/Screen";
 import PrimaryButton from "../components/PrimaryButton";
@@ -15,6 +15,7 @@ export default function CheckoutScreen({ route, navigation }) {
   const { items, subtotal, clear } = useCart();
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("COD");
+  const submittingRef = useRef(false);
   const couponCode = route.params?.couponCode || "";
   const delivery = 40;
   const taxes = Number((subtotal * .05).toFixed(2));
@@ -32,6 +33,23 @@ export default function CheckoutScreen({ route, navigation }) {
 
   const finish = (order) => { clear(); navigation.replace("OrderSuccess", { order }); };
 
+  const validateCheckout = () => {
+    if (!user?.id && !user?._id) return "Please login again before checkout.";
+    if (!items.length) return "Add products before checkout.";
+    const invalidItem = items.find((item) => !item._id || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1);
+    if (invalidItem) return "Your cart has an invalid item. Remove it and add it again.";
+    const storeIds = new Set(items.map((item) => String(item.storeId?._id || item.storeId || "")));
+    if (storeIds.size !== 1 || storeIds.has("")) return "All cart products must belong to one valid store.";
+    if (!selectedAddress) return "Please choose a delivery address.";
+    const street = String(selectedAddress.address || selectedAddress.street || "").trim();
+    const city = String(selectedAddress.city || "").trim();
+    const pincode = String(selectedAddress.pincode || "").trim();
+    const hasLocation = selectedAddress.latitude && selectedAddress.longitude;
+    if (street.length < 5) return "Please add a complete delivery address.";
+    if (!city && !pincode && !hasLocation) return "Please add city, PIN code, or use current location.";
+    return "";
+  };
+
   const payOnline = async () => {
     if (Platform.OS === "web") {
       Alert.alert("Mobile payment", "Razorpay UPI checkout is available in the Android/iOS app.");
@@ -39,7 +57,8 @@ export default function CheckoutScreen({ route, navigation }) {
     }
 
     let appOrderId;
-    let paymentStarted = false;
+    let checkoutOpened = false;
+    let paymentResponseReceived = false;
     let paymentVerified = false;
 
     try {
@@ -58,7 +77,7 @@ export default function CheckoutScreen({ route, navigation }) {
         throw new Error("Payment could not be initialized. Please try again or choose COD.");
       }
 
-      paymentStarted = true;
+      checkoutOpened = true;
       const payment = await RazorpayCheckout.open({
         key,
         amount: data.amount,
@@ -70,6 +89,7 @@ export default function CheckoutScreen({ route, navigation }) {
         theme: { color: colors.purple },
         method: { upi: true, card: true, netbanking: true, wallet: true },
       });
+      paymentResponseReceived = true;
 
       const verified = await api.post("/orders/payment/verify", {
         orderId: appOrderId,
@@ -81,7 +101,7 @@ export default function CheckoutScreen({ route, navigation }) {
       finish(verified.data.order);
     } catch (error) {
       const wasCancelled = /cancel/i.test(error.description || error.message || "");
-      if (appOrderId && paymentStarted && !paymentVerified) {
+      if (appOrderId && checkoutOpened && !paymentResponseReceived && !paymentVerified) {
         await api.post(`/orders/payment/${appOrderId}/failure`, {
           state: wasCancelled ? "cancelled" : "failed",
           reason: error.description || error.message || "Payment not completed",
@@ -92,14 +112,19 @@ export default function CheckoutScreen({ route, navigation }) {
   };
 
   const place = async () => {
-    if (!selectedAddress) return navigation.navigate("Location");
-    if (!items.length) return Alert.alert("Cart is empty", "Add products before checkout.");
+    if (submittingRef.current) return;
+    const validationMessage = validateCheckout();
+    if (validationMessage) {
+      if (!selectedAddress) return navigation.navigate("Location");
+      return Alert.alert("Checkout incomplete", validationMessage);
+    }
+    submittingRef.current = true;
     setLoading(true);
     try {
       if (paymentMethod === "Razorpay") await payOnline();
       else { const { data } = await api.post("/orders/place", payload("COD")); finish(data.order); }
     } catch (error) { Alert.alert("Couldn’t place order", messageFromError(error)); }
-    finally { setLoading(false); }
+    finally { submittingRef.current = false; setLoading(false); }
   };
 
   return <Screen>

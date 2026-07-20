@@ -12,6 +12,12 @@ const otpSchema = new mongoose.Schema(
     attempts: { type: Number, default: 0 },
     expiresAt: { type: Date, required: true, index: { expires: 0 } },
     lastSentAt: { type: Date, default: Date.now },
+    verified: { type: Boolean, default: false },
+    registrationData: {
+      name: { type: String, trim: true },
+      mobile: { type: String, trim: true },
+      passwordHash: { type: String, select: false },
+    },
   },
   { timestamps: true }
 );

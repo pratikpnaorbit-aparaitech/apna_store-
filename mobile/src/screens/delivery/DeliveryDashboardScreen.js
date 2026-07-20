@@ -12,6 +12,7 @@ import { colors, shadow } from "../../theme";
 const STATUS_COLORS = {
   Confirmed: ["#FEF3C7", "#B45309"],
   Preparing: ["#FFEDD5", "#C2410C"],
+  "Picked Up": ["#E0F2FE", "#0369A1"],
   "Out for Delivery": ["#DBEAFE", "#1D4ED8"],
   Delivered: ["#DCFCE7", "#15803D"],
   Cancelled: ["#FEE2E2", "#B91C1C"],
@@ -66,8 +67,8 @@ export default function DeliveryDashboardScreen({ navigation }) {
   useEffect(() => { loadOrders(); }, [loadOrders]);
   useFocusEffect(useCallback(() => { loadOrders({ silent: true }); }, [loadOrders]));
   useEffect(() => {
-    const hasOutForDelivery = orders.some((order) => order.status === "Out for Delivery");
-    if (hasOutForDelivery) startLocationSharing();
+    const hasTrackableDelivery = orders.some((order) => ["Picked Up", "Out for Delivery"].includes(order.status));
+    if (hasTrackableDelivery) startLocationSharing();
     else stopLocationSharing();
     return () => stopLocationSharing();
   }, [orders]);
@@ -117,7 +118,7 @@ export default function DeliveryDashboardScreen({ navigation }) {
   const stopLocationSharing = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = null;
-    if (!orders.some((order) => order.status === "Out for Delivery")) {
+    if (!orders.some((order) => ["Picked Up", "Out for Delivery"].includes(order.status))) {
       setLocationStatus("idle");
       setLocationError("");
     }
@@ -132,7 +133,7 @@ export default function DeliveryDashboardScreen({ navigation }) {
       setUpdating(orderId);
       const { data } = await api.put(`/delivery-partners/order/${orderId}/status`, { status });
       setOrders((current) => current.map((order) => order._id === orderId ? (data.order || { ...order, status }) : order));
-      if (status === "Out for Delivery") pushLocation();
+      if (["Picked Up", "Out for Delivery"].includes(status)) pushLocation();
     } catch (e) {
       Alert.alert("Status not updated", messageFromError(e, "Failed to update order status."));
     } finally {
@@ -184,8 +185,8 @@ export default function DeliveryDashboardScreen({ navigation }) {
     setLogoutLoading(true);
     stopLocationSharing();
 
-    // AuthContext sets user=null immediately; RootNavigator then remounts AuthStack(Login)
-    // with a new key, so Android/iOS back cannot return to DeliveryDashboard.
+    // AuthContext sets user=null immediately; RootNavigator then remounts the guest
+    // customer stack, so Android/iOS back cannot return to DeliveryDashboard.
     await logout();
   };
 
@@ -211,7 +212,8 @@ export default function DeliveryDashboardScreen({ navigation }) {
         <View style={styles.amountRow}><View><Text style={styles.amount}>₹{Number(order.totalAmount || 0).toFixed(2)}</Text><Text style={styles.payment}>{order.paymentMethod || "COD"} • {order.paymentStatus || "pending"}</Text></View><View style={styles.quickActions}><Pressable onPress={() => openDirections(order)} hitSlop={8} style={styles.mapButton}><Ionicons name="navigate-outline" size={15} color={colors.purpleDark} /><Text style={styles.mapText}>Directions</Text></Pressable><Pressable onPress={() => navigation.navigate("DeliveryOrderDetails", { order })} hitSlop={8} style={styles.detailsButton}><Ionicons name="document-text-outline" size={15} color="#075985" /><Text style={styles.detailsText}>Details</Text></Pressable></View></View>
       </View>
       <View style={styles.actions}>
-        {(order.status === "Confirmed" || order.status === "Preparing") ? <Pressable disabled={updating === order._id} onPress={() => updateStatus(order._id, "Out for Delivery")} style={styles.blueButton}><Text style={styles.buttonText}>{updating === order._id ? "Updating…" : "Pick Up / Out for Delivery"}</Text></Pressable> : null}
+        {(order.status === "Confirmed" || order.status === "Preparing") ? <Pressable disabled={updating === order._id} onPress={() => updateStatus(order._id, "Picked Up")} style={styles.blueButton}><Text style={styles.buttonText}>{updating === order._id ? "Updating…" : "Confirm Pick Up"}</Text></Pressable> : null}
+        {order.status === "Picked Up" ? <Pressable disabled={updating === order._id} onPress={() => updateStatus(order._id, "Out for Delivery")} style={styles.blueButton}><Text style={styles.buttonText}>{updating === order._id ? "Updating…" : "Start Delivery"}</Text></Pressable> : null}
         {order.status === "Out for Delivery" ? <View style={{ gap: 10 }}>
           <Pressable disabled={otpLoading === order._id} onPress={() => requestDeliveryOtp(order._id)} style={styles.orangeButton}><Text style={styles.buttonText}>{otpLoading === order._id ? "Sending OTP…" : "Send OTP to Customer"}</Text></Pressable>
           {otpRequested[order._id] ? <View style={styles.otpBox}>

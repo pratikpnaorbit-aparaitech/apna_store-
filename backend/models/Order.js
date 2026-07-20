@@ -43,6 +43,11 @@ const OrderSchema = new mongoose.Schema(
       ref: "DeliveryPartner",
       default: null,
     },
+    deliveryPartnerLocation: {
+      latitude: { type: Number, min: -90, max: 90 },
+      longitude: { type: Number, min: -180, max: 180 },
+      updatedAt: { type: Date },
+    },
     storeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Store",
@@ -65,6 +70,7 @@ const OrderSchema = new mongoose.Schema(
         "Placed",
         "Confirmed",
         "Preparing",
+        "Picked Up",
         "Out for Delivery",
         "Delivered",
         "Cancelled",

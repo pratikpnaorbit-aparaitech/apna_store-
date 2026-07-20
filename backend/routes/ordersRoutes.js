@@ -20,10 +20,71 @@ const ORDER_STATUSES = [
   "Placed",
   "Confirmed",
   "Preparing",
+  "Picked Up",
   "Out for Delivery",
   "Delivered",
   "Cancelled",
 ];
+const CUSTOMER_CANCELLABLE_STATUSES = ["Placed", "Confirmed"];
+const DELIVERY_LOCKED_STATUSES = ["Picked Up", "Out for Delivery", "Delivered"];
+
+const TRACKING_STEPS = [
+  { key: "placed", label: "Order Placed" },
+  { key: "accepted", label: "Accepted" },
+  { key: "preparing", label: "Preparing" },
+  { key: "assigned", label: "Assigned Delivery Partner" },
+  { key: "pickedUp", label: "Picked Up" },
+  { key: "outForDelivery", label: "Out For Delivery" },
+  { key: "delivered", label: "Delivered" },
+];
+
+function buildTrackingTimeline(order) {
+  const statusRank = {
+    Placed: 0,
+    Confirmed: 1,
+    Preparing: 2,
+    "Picked Up": 4,
+    "Out for Delivery": 5,
+    Delivered: 6,
+  };
+  const rank = statusRank[order.status] ?? 0;
+  return TRACKING_STEPS.map((step, index) => ({
+    ...step,
+    completed:
+      order.status !== "Cancelled" &&
+      (index <= rank || (step.key === "assigned" && Boolean(order.deliveryPartnerId))),
+    current: order.status !== "Cancelled" && index === rank,
+  }));
+}
+
+function canAccessTracking(req, order) {
+  if (req.user.role === "user") return String(order.userId) === req.user.id;
+  if (req.user.role === "delivery_partner")
+    return String(order.deliveryPartnerId?._id || order.deliveryPartnerId || "") === req.user.id;
+  return req.user.role === "super_admin";
+}
+
+function getCustomerCancellationBlock(order) {
+  if (!order) return { status: 404, message: "Order not found" };
+  if (order.status === "Cancelled")
+    return { status: 409, message: "Order is already cancelled." };
+  if (DELIVERY_LOCKED_STATUSES.includes(order.status))
+    return {
+      status: 409,
+      message: "Order cannot be cancelled because it has already been picked up for delivery.",
+    };
+  if (!CUSTOMER_CANCELLABLE_STATUSES.includes(order.status))
+    return {
+      status: 409,
+      message: "This order can no longer be cancelled because preparation or delivery has started",
+    };
+  if (order.paymentMethod === "Razorpay" && order.paymentStatus === "paid")
+    return {
+      status: 400,
+      message: "Paid online orders require refund assistance. Please contact support.",
+    };
+  return null;
+}
 
 function getRazorpay() {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -408,11 +469,15 @@ router.post(
 
 router.get("/user/:userId", authMiddleware, async (req, res, next) => {
   try {
-    if (req.user.role === "user" && req.user.id !== req.params.userId)
+    const canRead =
+      (req.user.role === "user" && req.user.id === req.params.userId) ||
+      req.user.role === "super_admin";
+    if (!canRead)
       return res.status(403).json({ message: "Forbidden" });
     res.json(
       await Order.find({ userId: req.params.userId })
-        .populate("deliveryPartnerId", "name phone vehicleType")
+        .select("-deliveryPartnerLocation")
+        .populate("deliveryPartnerId", "name phone vehicleType vehicleNumber")
         .sort({ createdAt: -1 }),
     );
   } catch (error) {
@@ -426,38 +491,51 @@ router.put(
   allowRole(["user"]),
   async (req, res, next) => {
     try {
-      const order = await Order.findOne({
-        _id: req.params.id,
-        userId: req.user.id,
-      });
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      if (order.status === "Cancelled")
-        return res.json({ success: true, order });
-      if (!["Placed", "Confirmed"].includes(order.status)) {
-        return res.status(400).json({
-          message:
-            "This order can no longer be cancelled because preparation or delivery has started",
-        });
-      }
-      if (
-        order.paymentMethod === "Razorpay" &&
-        order.paymentStatus === "paid"
-      ) {
-        return res.status(400).json({
-          message:
-            "Paid online orders require refund assistance. Please contact support.",
-        });
-      }
       const cancellationReason = String(req.body.reason || "").trim();
       if (cancellationReason.length < 3)
         return res
           .status(400)
           .json({ message: "Please provide a cancellation reason" });
-      order.status = "Cancelled";
-      order.cancellationReason = cancellationReason.slice(0, 500);
-      order.cancelledBy = "user";
-      order.cancelledAt = new Date();
-      if (order.paymentStatus === "pending") order.paymentStatus = "cancelled";
+
+      const currentOrder = await Order.findOne({
+        _id: req.params.id,
+        userId: req.user.id,
+      });
+      const initialBlock = getCustomerCancellationBlock(currentOrder);
+      if (initialBlock)
+        return res.status(initialBlock.status).json({ message: initialBlock.message });
+
+      const now = new Date();
+      const order = await Order.findOneAndUpdate(
+        {
+          _id: req.params.id,
+          userId: req.user.id,
+          status: { $in: CUSTOMER_CANCELLABLE_STATUSES },
+          $nor: [{ paymentMethod: "Razorpay", paymentStatus: "paid" }],
+        },
+        {
+          $set: {
+            status: "Cancelled",
+            cancellationReason: cancellationReason.slice(0, 500),
+            cancelledBy: "user",
+            cancelledAt: now,
+            ...(currentOrder.paymentStatus === "pending" ? { paymentStatus: "cancelled" } : {}),
+          },
+        },
+        { returnDocument: "after" },
+      );
+
+      if (!order) {
+        const latestOrder = await Order.findOne({
+          _id: req.params.id,
+          userId: req.user.id,
+        });
+        const latestBlock = getCustomerCancellationBlock(latestOrder);
+        return res.status(latestBlock?.status || 409).json({
+          message: latestBlock?.message || "Order status changed before cancellation. Please refresh and try again.",
+        });
+      }
+
       await restoreOrderStock(order);
       await order.save();
       if (order.deliveryPartnerId) {
@@ -498,6 +576,67 @@ router.put(
     }
   },
 );
+
+router.get("/:id/tracking", authMiddleware, async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.id).populate(
+      "deliveryPartnerId",
+      "name phone vehicleType vehicleNumber",
+    );
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!canAccessTracking(req, order))
+      return res.status(403).json({ message: "Forbidden" });
+
+    const locationVisible = ["Picked Up", "Out for Delivery"].includes(order.status);
+    const safeOrder = order.toObject();
+    if (!locationVisible) delete safeOrder.deliveryPartnerLocation;
+    return res.json({
+      success: true,
+      order: safeOrder,
+      timeline: buildTrackingTimeline(order),
+      locationVisible,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/location", authMiddleware, async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.id).populate(
+      "deliveryPartnerId",
+      "name location vehicleType vehicleNumber",
+    );
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!canAccessTracking(req, order))
+      return res.status(403).json({ message: "Forbidden" });
+
+    const visible = ["Picked Up", "Out for Delivery"].includes(order.status);
+    if (!visible) {
+      return res.json({ success: true, visible: false, location: null });
+    }
+
+    const saved = order.deliveryPartnerLocation;
+    const fallback = order.deliveryPartnerId?.location;
+    const location = Number.isFinite(saved?.latitude) && Number.isFinite(saved?.longitude)
+      ? saved
+      : Number.isFinite(fallback?.lat) && Number.isFinite(fallback?.lng)
+        ? {
+            latitude: fallback.lat,
+            longitude: fallback.lng,
+            updatedAt: fallback.updatedAt,
+          }
+        : null;
+    return res.json({
+      success: true,
+      visible: true,
+      location,
+      customerLocation: order.customerLocation || null,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get(
   "/all",
@@ -762,6 +901,9 @@ router.put(
     try {
       if (!ORDER_STATUSES.includes(req.body.status))
         return res.status(400).json({ message: "Invalid status" });
+      if (req.body.status === "Delivered") {
+        return res.status(400).json({ message: "Delivery must be completed with OTP verification" });
+      }
       const update = { status: req.body.status };
       if (req.body.status === "Cancelled") {
         update.cancellationReason = String(
@@ -770,7 +912,13 @@ router.put(
         update.cancelledBy = req.user.role;
         update.cancelledAt = new Date();
       }
-      const order = await Order.findByIdAndUpdate(req.params.id, update, {
+      if (req.user.role !== "super_admin" && !req.user.storeId)
+        return res.status(403).json({ message: "No store is assigned to this account" });
+      const order = await Order.findOneAndUpdate({
+        _id: req.params.id,
+        status: { $nin: ["Delivered", "Cancelled"] },
+        ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
+      }, update, {
         returnDocument: "after",
       }).populate("deliveryPartnerId", "name phone vehicleType");
       if (!order) return res.status(404).json({ message: "Order not found" });
@@ -799,13 +947,42 @@ router.put(
   allowRole(["admin", "super_admin"]),
   async (req, res, next) => {
     try {
-      const order = await Order.findByIdAndUpdate(
-        req.params.id,
-        { deliveryPartnerId: req.body.deliveryPartnerId, status: "Confirmed" },
+      if (req.user.role !== "super_admin" && !req.user.storeId)
+        return res.status(403).json({ message: "No store is assigned to this account" });
+      const partner = await DeliveryPartner.findOne({
+        _id: req.body.deliveryPartnerId,
+        isActive: true,
+        isAvailable: true,
+        ...(req.user.role === "super_admin"
+          ? {}
+          : { $or: [{ storeId: req.user.storeId }, { storeId: null }] }),
+      });
+      if (!partner)
+        return res.status(400).json({ message: "Choose an active delivery partner available to this store" });
+      const currentOrder = await Order.findOne({
+        _id: req.params.id,
+        ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
+      }).select("deliveryPartnerId");
+      if (!currentOrder) return res.status(404).json({ message: "Order not found" });
+      const order = await Order.findOneAndUpdate(
+        {
+          _id: req.params.id,
+          ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
+        },
+        {
+          $set: { deliveryPartnerId: req.body.deliveryPartnerId, status: "Confirmed" },
+          $unset: { deliveryPartnerLocation: 1 },
+        },
         { returnDocument: "after" },
-      ).populate("deliveryPartnerId", "name phone vehicleType");
+      ).populate("deliveryPartnerId", "name phone vehicleType vehicleNumber");
       if (!order) return res.status(404).json({ message: "Order not found" });
-      await DeliveryPartner.findByIdAndUpdate(req.body.deliveryPartnerId, {
+      if (currentOrder.deliveryPartnerId && String(currentOrder.deliveryPartnerId) !== String(partner._id)) {
+        await DeliveryPartner.findByIdAndUpdate(currentOrder.deliveryPartnerId, {
+          isAvailable: true,
+          currentOrderId: null,
+        });
+      }
+      await DeliveryPartner.findByIdAndUpdate(partner._id, {
         isAvailable: false,
         currentOrderId: req.params.id,
       });

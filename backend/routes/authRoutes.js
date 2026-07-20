@@ -29,7 +29,7 @@ function formatUser(user) {
 const normalizeEmail = (email = "") => email.trim().toLowerCase();
 const hashOtp = (otp) => crypto.createHash("sha256").update(otp).digest("hex");
 
-async function createAndSendOtp(email, purpose) {
+async function createAndSendOtp(email, purpose, extraFields = {}) {
   const existingOtp = await Otp.findOne({ email, purpose });
   if (existingOtp && Date.now() - existingOtp.lastSentAt.getTime() < 60 * 1000) {
     const error = new Error("Please wait 60 seconds before requesting another OTP");
@@ -45,6 +45,8 @@ async function createAndSendOtp(email, purpose) {
       attempts: 0,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       lastSentAt: new Date(),
+      verified: false,
+      ...extraFields,
     },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
@@ -56,6 +58,120 @@ async function createAndSendOtp(email, purpose) {
     throw error;
   }
 }
+
+function validateRegistration(body = {}) {
+  const name = String(body.name || "").trim();
+  const email = normalizeEmail(body.email);
+  const mobile = String(body.phone || body.mobile || "").trim();
+  const password = String(body.password || "");
+
+  if (name.length < 2) throw Object.assign(new Error("Please enter your full name"), { status: 400 });
+  if (!/^\S+@\S+\.\S+$/.test(email))
+    throw Object.assign(new Error("Please enter a valid email"), { status: 400 });
+  if (!/^[6-9]\d{9}$/.test(mobile))
+    throw Object.assign(new Error("Please enter a valid 10-digit phone number"), { status: 400 });
+  if (password.length < 6)
+    throw Object.assign(new Error("Password must be at least 6 characters"), { status: 400 });
+
+  return { name, email, mobile, password };
+}
+
+async function sendRegistrationOtpHandler(req, res) {
+  try {
+    const registration = validateRegistration(req.body);
+    const duplicate = await User.findOne({
+      $or: [{ email: registration.email }, { mobile: registration.mobile }],
+    }).select("email mobile");
+    if (duplicate) {
+      const field = duplicate.email === registration.email ? "email" : "phone number";
+      return res.status(409).json({
+        success: false,
+        message: `An account with this ${field} already exists`,
+      });
+    }
+
+    await createAndSendOtp(registration.email, "registration", {
+      registrationData: {
+        name: registration.name,
+        mobile: registration.mobile,
+        passwordHash: await bcrypt.hash(registration.password, 10),
+      },
+    });
+    return res.json({
+      success: true,
+      message: "OTP sent to your email",
+      expiresInSeconds: 600,
+      resendAfterSeconds: 60,
+    });
+  } catch (error) {
+    console.error("SEND REGISTRATION OTP ERROR:", error.message);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : "Could not send OTP. Please try again.",
+    });
+  }
+}
+
+async function verifyRegistrationOtpHandler(req, res) {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const otp = String(req.body.otp || "").trim();
+    if (!/^\S+@\S+\.\S+$/.test(email) || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ success: false, message: "Enter a valid 6-digit OTP" });
+    }
+    if (!(await verifyOtp(email, "registration", otp))) {
+      return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
+    }
+
+    const otpRecord = await Otp.findOne({ email, purpose: "registration" })
+      .select("+registrationData.passwordHash");
+    const pending = otpRecord?.registrationData;
+    if (!pending?.name || !pending?.mobile || !pending?.passwordHash) {
+      return res.status(400).json({ success: false, message: "Registration session expired. Request a new OTP." });
+    }
+
+    const duplicate = await User.findOne({
+      $or: [{ email }, { mobile: pending.mobile }],
+    }).select("email mobile");
+    if (duplicate) {
+      await Otp.deleteOne({ _id: otpRecord._id });
+      return res.status(409).json({ success: false, message: "An account with this email or phone number already exists" });
+    }
+
+    const user = await User.create({
+      name: pending.name,
+      email,
+      mobile: pending.mobile,
+      password: pending.passwordHash,
+      role: "user",
+      isEmailVerified: true,
+      isActive: true,
+    });
+    await Otp.updateOne({ _id: otpRecord._id }, { $set: { verified: true } });
+    await Otp.deleteOne({ _id: otpRecord._id });
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" },
+    );
+    return res.status(201).json({
+      success: true,
+      message: "Account created successfully",
+      token,
+      user: formatUser(user),
+    });
+  } catch (error) {
+    console.error("VERIFY REGISTRATION OTP ERROR:", error.message);
+    if (error?.code === 11000) {
+      return res.status(409).json({ success: false, message: "An account with this email or phone number already exists" });
+    }
+    return res.status(500).json({ success: false, message: "Registration failed. Please try again." });
+  }
+}
+
+router.post("/send-registration-otp", sendRegistrationOtpHandler);
+router.post("/verify-registration-otp", verifyRegistrationOtpHandler);
 
 async function verifyOtp(email, purpose, otp) {
   const record = await Otp.findOne({ email, purpose });
@@ -259,46 +375,7 @@ router.post("/login", async (req, res) => {
 
 /* ================= MOBILE APP EMAIL REGISTRATION ================= */
 
-router.post("/register-app", async (req, res) => {
-  try {
-    const name = String(req.body.name || "").trim();
-    const email = normalizeEmail(req.body.email);
-    const password = String(req.body.password || "");
-
-    if (name.length < 2) {
-      return res.status(400).json({ success: false, message: "Please enter your full name" });
-    }
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      return res.status(400).json({ success: false, message: "Please enter a valid email" });
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
-    }
-    if (await User.exists({ email })) {
-      return res.status(409).json({ success: false, message: "An account with this email already exists" });
-    }
-
-    const user = await User.create({
-      name,
-      email,
-      password: await bcrypt.hash(password, 10),
-      role: "user",
-      isEmailVerified: false,
-      isActive: true,
-    });
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-    res.status(201).json({
-      success: true,
-      message: "Account created successfully",
-      token,
-      user: formatUser(user),
-    });
-  } catch (error) {
-    console.error("APP REGISTRATION ERROR:", error.message);
-    res.status(500).json({ success: false, message: "Registration failed. Please try again." });
-  }
-});
+router.post("/register-app", verifyRegistrationOtpHandler);
 
 /* ================= GET CURRENT USER ================= */
 

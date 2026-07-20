@@ -4,6 +4,36 @@ const Product = require("../models/Product");
 const authMiddleware = require("../middleware/authMiddleware");
 const allowRoles = require("../middleware/roleMiddleware");
 
+const uploadUrl = (req, filename) => `${req.protocol}://${req.get("host")}/uploads/${encodeURIComponent(filename)}`;
+
+function normalizeStoredImageUrl(value, req) {
+  if (!value || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const url = new URL(value);
+    const localHost = ["localhost", "127.0.0.1", "0.0.0.0", "10.0.2.2"].includes(url.hostname);
+    if (!localHost) return value;
+    return url.pathname.startsWith("/uploads/")
+      ? `${req.protocol}://${req.get("host")}${url.pathname}`
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function productResponse(product, req) {
+  const data = product.toObject ? product.toObject() : product;
+  const imageUrl =
+    data.image_url && /^https?:\/\//i.test(data.image_url)
+      ? normalizeStoredImageUrl(data.image_url, req)
+      : data.image && /^https?:\/\//i.test(data.image)
+        ? normalizeStoredImageUrl(data.image, req)
+        : data.image
+          ? uploadUrl(req, data.image)
+          : data.image_url || null;
+
+  return { ...data, image_url: imageUrl };
+}
+
 /* =========================
    GET ALL PRODUCTS — public
    (user shopping frontend uses this)
@@ -20,7 +50,7 @@ router.get("/", async (req, res) => {
       .populate("storeId", "name categories")
       .sort({ is_featured: -1, created_at: -1 });
 
-    res.json(products);
+    res.json(products.map((product) => productResponse(product, req)));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -34,7 +64,7 @@ router.get("/category/:category", async (req, res) => {
     const category = decodeURIComponent(req.params.category);
     const products = await Product.find({ category, is_active: 1 })
       .populate("storeId", "name categories");
-    res.json(products);
+    res.json(products.map((product) => productResponse(product, req)));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -48,7 +78,7 @@ router.get("/:id", async (req, res) => {
     const product = await Product.findById(req.params.id)
       .populate("storeId", "name categories");
     if (!product) return res.status(404).json({ message: "Product not found" });
-    res.json(product);
+    res.json(productResponse(product, req));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

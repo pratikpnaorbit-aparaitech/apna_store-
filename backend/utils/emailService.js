@@ -1,5 +1,23 @@
 const nodemailer = require("nodemailer");
 
+const SENDER_NAME = "Apna Store";
+
+function getSenderEmail() {
+  const candidates = [
+    process.env.MAIL_FROM_EMAIL,
+    process.env.MAIL_FROM,
+    process.env.SMTP_USER,
+    process.env.BREVO_SMTP_USER,
+  ];
+  for (const value of candidates) {
+    const configured = String(value || "").trim();
+    const angleAddress = configured.match(/<([^<>\s]+@[^<>\s]+)>/);
+    const address = (angleAddress?.[1] || configured).trim();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return address;
+  }
+  return "";
+}
+
 function getTransporter() {
   const host = process.env.SMTP_HOST || process.env.BREVO_SMTP_HOST;
   const port = process.env.SMTP_PORT || process.env.BREVO_SMTP_PORT;
@@ -50,7 +68,7 @@ async function sendOtpEmail({ email, otp, purpose }) {
   // A Brevo REST API key (xkeysib-...) is different from an SMTP key.
   // Prefer the REST API when it is configured; SMTP remains available as fallback.
   if (process.env.BREVO_API_KEY) {
-    const senderEmail = process.env.MAIL_FROM_EMAIL;
+    const senderEmail = getSenderEmail();
     if (!senderEmail) throw new Error("MAIL_FROM_EMAIL is not configured");
 
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -63,7 +81,7 @@ async function sendOtpEmail({ email, otp, purpose }) {
       body: JSON.stringify({
         sender: {
           email: senderEmail,
-          name: process.env.MAIL_FROM_NAME || "SmartStore",
+          name: SENDER_NAME,
         },
         to: [{ email }],
         subject,
@@ -80,7 +98,7 @@ async function sendOtpEmail({ email, otp, purpose }) {
   }
 
   await getTransporter().sendMail({
-    from: process.env.MAIL_FROM || process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER,
+    from: { name: SENDER_NAME, address: getSenderEmail() },
     to: email,
     subject,
     text,

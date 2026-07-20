@@ -2,7 +2,11 @@ const Transaction = require("../models/Transaction");
 
 exports.getTransactions = async (req, res) => {
   try {
+    if (req.user.role !== "super_admin" && !req.user.storeId)
+      return res.status(403).json({ success: false, message: "No store is assigned to this account" });
+    const storeFilter = req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
     const transactions = await Transaction.aggregate([
+      { $match: storeFilter },
       {
         $lookup: {
           from: "customers",
@@ -37,7 +41,11 @@ exports.getTransactions = async (req, res) => {
 
 exports.getStats = async (req, res) => {
   try {
+    if (req.user.role !== "super_admin" && !req.user.storeId)
+      return res.status(403).json({ success: false, message: "No store is assigned to this account" });
+    const storeFilter = req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
     const stats = await Transaction.aggregate([
+      { $match: storeFilter },
       {
         $group: {
           _id: null,

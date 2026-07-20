@@ -7,12 +7,15 @@ const Order = require("../models/Order");
 ============================== */
 exports.getStats = async (req, res) => {
   try {
+    if (req.user.role !== "super_admin" && !req.user.storeId)
+      return res.status(403).json({ message: "No store is assigned to this account" });
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const storeId = req.user.storeId;
+    const storeId = req.user.role === "super_admin" ? null : req.user.storeId;
+    const storeFilter = storeId ? { storeId } : {};
 
     const [
       totalProducts,
@@ -24,23 +27,24 @@ exports.getStats = async (req, res) => {
       todayOrders,
     ] = await Promise.all([
       // Total products count
-      Product.countDocuments({ is_active: 1, ...(storeId ? { storeId } : {}) }),
+      Product.countDocuments({ is_active: 1, ...storeFilter }),
 
       // Total stock sum
       Product.aggregate([
-        { $match: { is_active: 1, ...(storeId ? { storeId } : {}) } },
+        { $match: { is_active: 1, ...storeFilter } },
         { $group: { _id: null, total: { $sum: "$stock" } } },
       ]).then((result) => result[0]?.total || 0),
 
       // Total revenue from successful transactions
       Transaction.aggregate([
-        { $match: { status: "SUCCESS" } },
+        { $match: { status: "SUCCESS", ...storeFilter } },
         { $group: { _id: null, total: { $sum: "$total" } } },
       ]).then((result) => result[0]?.total || 0),
 
       // Today's sales count
       Transaction.countDocuments({
         status: "SUCCESS",
+        ...storeFilter,
         created_at: { $gte: today, $lt: tomorrow },
       }),
 
@@ -49,6 +53,7 @@ exports.getStats = async (req, res) => {
         {
           $match: {
             status: "SUCCESS",
+            ...storeFilter,
             created_at: { $gte: today, $lt: tomorrow },
           },
         },
@@ -56,11 +61,11 @@ exports.getStats = async (req, res) => {
       ]).then((result) => result[0]?.total || 0),
 
       // Total online orders for this store
-      Order.countDocuments({ ...(storeId ? { storeId } : {}) }),
+      Order.countDocuments(storeFilter),
 
       // Today's online orders
       Order.countDocuments({
-        ...(storeId ? { storeId } : {}),
+        ...storeFilter,
         createdAt: { $gte: today, $lt: tomorrow },
       }),
     ]);
@@ -87,6 +92,9 @@ exports.getStats = async (req, res) => {
 ============================== */
 exports.getWeeklyRevenue = async (req, res) => {
   try {
+    if (req.user.role !== "super_admin" && !req.user.storeId)
+      return res.status(403).json({ message: "No store is assigned to this account" });
+    const storeFilter = req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
     const sixDaysAgo = new Date();
     sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
     sixDaysAgo.setHours(0, 0, 0, 0);
@@ -95,6 +103,7 @@ exports.getWeeklyRevenue = async (req, res) => {
       {
         $match: {
           status: "SUCCESS",
+          ...storeFilter,
           created_at: { $gte: sixDaysAgo },
         },
       },
@@ -128,7 +137,11 @@ exports.getWeeklyRevenue = async (req, res) => {
 ============================== */
 exports.getPaymentChart = async (req, res) => {
   try {
+    if (req.user.role !== "super_admin" && !req.user.storeId)
+      return res.status(403).json({ message: "No store is assigned to this account" });
+    const storeFilter = req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
     const paymentChart = await Transaction.aggregate([
+      { $match: storeFilter },
       {
         $group: {
           _id: "$payment_mode",
@@ -156,7 +169,10 @@ exports.getPaymentChart = async (req, res) => {
 ============================== */
 exports.getRecentTransactions = async (req, res) => {
   try {
-    const recentTransactions = await Transaction.find()
+    if (req.user.role !== "super_admin" && !req.user.storeId)
+      return res.status(403).json({ message: "No store is assigned to this account" });
+    const storeFilter = req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
+    const recentTransactions = await Transaction.find(storeFilter)
       .select("bill_no total payment_mode created_at")
       .sort({ created_at: -1 })
       .limit(5);
@@ -173,7 +189,9 @@ exports.getRecentTransactions = async (req, res) => {
 ============================== */
 exports.getLowStock = async (req, res) => {
   try {
-    const storeId = req.user.storeId;
+    if (req.user.role !== "super_admin" && !req.user.storeId)
+      return res.status(403).json({ message: "No store is assigned to this account" });
+    const storeId = req.user.role === "super_admin" ? null : req.user.storeId;
     const lowStockItems = await Product.find({
       is_active: 1,
       stock: { $lte: 5 },

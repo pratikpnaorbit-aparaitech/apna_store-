@@ -1,10 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useAuth } from "./AuthContext";
 
 const AddressContext = createContext(null);
 const KEY = "smartstore_addresses_v1";
 
 export function AddressProvider({ children }) {
+  const { user, loading: authLoading, authEpoch } = useAuth();
   const [addresses, setAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [ready, setReady] = useState(false);
@@ -30,6 +32,12 @@ export function AddressProvider({ children }) {
   };
 
   const selectAddress = async (id) => saveAll(addresses, id);
+  useEffect(() => {
+    if (!authLoading && !user) {
+      setAddresses([]);
+      setSelectedAddress(null);
+    }
+  }, [authLoading, user, authEpoch]);
 
   const value = useMemo(() => ({ addresses, selectedAddress, ready, addAddress, selectAddress }), [addresses, selectedAddress, ready]);
   return <AddressContext.Provider value={value}>{children}</AddressContext.Provider>;

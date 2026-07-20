@@ -22,6 +22,14 @@ exports.createBill = async (req, res) => {
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: "Cart is empty" });
   }
+  if (!["CASH", "UPI", "CARD", "WALLET"].includes(paymentMode)) {
+    return res.status(400).json({ message: "Choose a valid payment mode" });
+  }
+  if (req.user.role !== "super_admin" && !req.user.storeId) {
+    return res.status(403).json({ message: "No store is assigned to this account" });
+  }
+
+  let billingStoreId = req.user.storeId || null;
 
   // Start MongoDB session for transaction
   const session = await mongoose.startSession();
@@ -62,7 +70,8 @@ exports.createBill = async (req, res) => {
         email: newCustomer.email || null,
         points: 0,
         total_spent: 0,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        storeIds: billingStoreId ? [billingStoreId] : [],
       }], { session });
 
       customerId = customer[0]._id;
@@ -85,10 +94,16 @@ exports.createBill = async (req, res) => {
       // Find product with stock lock (using session)
       const product = await Product.findOne({ 
         _id: i.productId,
-        is_active: 1 
+        is_active: 1,
+        ...(req.user.role === "super_admin" ? {} : { storeId: billingStoreId }),
       }).session(session);
 
       if (!product) throw new Error("Product not found");
+      if (!product.storeId) throw new Error(`${product.name} is not assigned to a store`);
+      if (!billingStoreId) billingStoreId = product.storeId;
+      if (String(product.storeId) !== String(billingStoreId)) {
+        throw new Error("All billed products must belong to the same store");
+      }
       
       // Check stock
       if (product.stock < i.qty) {
@@ -149,6 +164,17 @@ exports.createBill = async (req, res) => {
     const gst = Number((subtotal * 0.18).toFixed(2));
     const total = Number((subtotal + gst).toFixed(2));
 
+    if (paymentMode === "CASH" && (!Number.isFinite(Number(cashReceived)) || Number(cashReceived) < total)) {
+      throw new Error(`Cash received must be at least ₹${total.toFixed(2)}`);
+    }
+
+    if (customerId && billingStoreId) {
+      await Customer.updateOne(
+        { _id: customerId },
+        { $addToSet: { storeIds: billingStoreId }, $set: { status: 'ACTIVE' } },
+      ).session(session);
+    }
+
     /* ======================
        4️⃣ CREATE TRANSACTION
     ====================== */
@@ -162,6 +188,7 @@ exports.createBill = async (req, res) => {
       total: total,
       payment_mode: paymentMode,
       payment_provider: 'POS',
+      storeId: billingStoreId,
       status: 'SUCCESS'
     }], { session });
 

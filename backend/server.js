@@ -12,6 +12,8 @@ const storeRoutes = require("./routes/storeRoutes");
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 // Validate required environment variables
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
@@ -132,6 +134,8 @@ app.use('/api', limiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/register-app', authLimiter);
+app.use('/api/auth/send-registration-otp', authLimiter);
+app.use('/api/auth/verify-registration-otp', authLimiter);
 
 // Only apply SMS rate limiters if routes exist
 if (fs.existsSync(path.join(__dirname, 'routes', 'smsRoutes.js'))) {
@@ -310,7 +314,7 @@ const startServer = async () => {
     });
 
     const PORT = process.env.PORT || 5000;
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`🔍 Health check: http://localhost:${PORT}/health`);
       console.log(`🛡️  Security: Helmet enabled, Rate limiting active`);

@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const transactionSchema = new mongoose.Schema({
   bill_no: { type: String, required: true, unique: true },
   customer_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' }, 
+  storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null, index: true },
   subtotal: { type: Number, required: true, min: 0 },
   gst: { type: Number, required: true, min: 0 },
   payment_provider: { type: String, default: 'POS' },
