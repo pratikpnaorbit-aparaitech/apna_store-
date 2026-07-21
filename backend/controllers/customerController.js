@@ -1,5 +1,6 @@
 const Customer = require("../models/Customer");
 const Transaction = require("../models/Transaction");
+const { text, email, phone } = require("../utils/managementInput");
 
 function storeScope(req) {
   return req.user.role === "super_admin" ? {} : { storeIds: req.user.storeId };
@@ -31,6 +32,7 @@ exports.getCustomerById = async (req, res) => {
     // Get transactions for this customer
     const transactions = await Transaction.find({ 
       customer_id: customer._id,
+      status: "SUCCESS",
       ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
     }).sort({ created_at: -1 }).limit(10);
 
@@ -85,13 +87,15 @@ exports.getCustomerById = async (req, res) => {
 exports.checkCustomerByPhone = async (req, res) => {
   try {
     if (!ensureStore(req, res)) return;
-    const { phone } = req.query;
+    const rawPhone = req.query.phone;
 
-    if (!phone) {
+    if (rawPhone === undefined || rawPhone === "") {
       return res.json({ exists: false });
     }
+    if (Array.isArray(rawPhone) || typeof rawPhone !== "string") return res.status(400).json({ message: "Phone number must be text" });
+    const normalizedPhone = phone(rawPhone, { required: true });
 
-    const customer = await Customer.findOne({ phone, status: 'ACTIVE', ...storeScope(req) });
+    const customer = await Customer.findOne({ phone: normalizedPhone, status: 'ACTIVE', ...storeScope(req) });
 
     if (!customer) {
       return res.json({ exists: false });
@@ -128,6 +132,7 @@ exports.getAllCustomers = async (req, res) => {
       customers.map(async (customer) => {
         const transactions = await Transaction.find({ 
           customer_id: customer._id,
+          status: "SUCCESS",
           ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
         });
         
@@ -163,15 +168,11 @@ exports.getAllCustomers = async (req, res) => {
 exports.enrollCustomer = async (req, res) => {
   try {
     if (!ensureStore(req, res)) return;
-    const { name, phone, email } = req.body;
+    const normalizedName = text(req.body.name, "Name", { required: true });
+    const normalizedPhone = phone(req.body.phone, { required: true });
+    const normalizedEmail = email(req.body.email);
 
-    if (!name || !phone) {
-      return res.status(400).json({
-        message: "Name and phone are required"
-      });
-    }
-
-    const existingCustomer = await Customer.findOne({ phone });
+    const existingCustomer = await Customer.findOne({ phone: normalizedPhone });
     if (existingCustomer) {
       if (req.user.role === "super_admin" || existingCustomer.storeIds?.some((id) => String(id) === String(req.user.storeId))) {
         return res.status(400).json({ message: "Customer with this phone number already exists" });
@@ -186,9 +187,9 @@ exports.enrollCustomer = async (req, res) => {
 
     const customer = await Customer.create({
       loyalty_id: loyaltyId,
-      name,
-      phone,
-      email: email || null,
+      name: normalizedName,
+      phone: normalizedPhone,
+      email: normalizedEmail || null,
       points: 0,
       total_spent: 0,
       status: 'ACTIVE',
@@ -203,8 +204,8 @@ exports.enrollCustomer = async (req, res) => {
 
   } catch (err) {
     console.error("CUSTOMER ENROLL ERROR:", err);
-    if (err.name === 'ValidationError') {
-      return res.status(400).json({ message: err.message });
+    if (err.status || err.name === 'ValidationError') {
+      return res.status(err.status || 400).json({ message: err.message });
     }
     res.status(500).json({
       message: "Customer enrollment failed"

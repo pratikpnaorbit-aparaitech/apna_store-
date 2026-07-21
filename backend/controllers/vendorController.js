@@ -1,4 +1,5 @@
 const Vendor = require("../models/Vendor");
+const { text, email, phone, money } = require("../utils/managementInput");
 
 const scopeFor = (req) => req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
 const hasStore = (req) => req.user.role === "super_admin" || Boolean(req.user.storeId);
@@ -40,38 +41,21 @@ exports.getVendors = async (req, res) => {
    ADD VENDOR
 ========================= */
 exports.addVendor = async (req, res) => {
-  const {
-    company_name,
-    category,
-    contact_person,
-    phone,
-    email,
-    account_manager,
-    payment_due,
-    address
-  } = req.body;
-
-  if (!company_name || !phone) {
-    return res.status(400).json({
-      success: false,
-      message: "Company name and phone are required"
-    });
-  }
-
   try {
     if (!hasStore(req)) return res.status(403).json({ success: false, message: "No store is assigned to this account" });
+    if (req.user.role === "super_admin" && req.body.storeId) return res.status(400).json({ success: false, message: "Choose a store through its assigned admin; global vendors are not supported." });
     // Create new vendor
     const vendor = await Vendor.create({
-      company_name,
-      category: category || null,
-      contact_person: contact_person || null,
-      phone,
-      email: email || null,
-      account_manager: account_manager || null,
-      payment_due: payment_due || 0,
-      address: address || null,
+      company_name: text(req.body.company_name, "Company name", { required: true }),
+      category: text(req.body.category, "Category") || null,
+      contact_person: text(req.body.contact_person, "Contact person") || null,
+      phone: phone(req.body.phone, { required: true }),
+      email: email(req.body.email) || null,
+      account_manager: text(req.body.account_manager, "Account manager") || null,
+      payment_due: req.body.payment_due === undefined ? 0 : money(req.body.payment_due, "Payment due"),
+      address: text(req.body.address, "Address", { max: 500 }) || null,
       createdBy: req.user?.id,
-      storeId: req.user.role === "super_admin" ? (req.body.storeId || null) : req.user.storeId,
+      storeId: req.user.storeId,
     });
 
     res.status(201).json({
@@ -81,6 +65,7 @@ exports.addVendor = async (req, res) => {
     });
 
   } catch (err) {
+    if (err.status || err.name === "ValidationError") return res.status(err.status || 400).json({ success: false, message: err.message });
     console.error("ADD VENDOR ERROR:", err);
     
     // Handle duplicate key error (if email is unique)
@@ -104,10 +89,20 @@ exports.addVendor = async (req, res) => {
 ========================= */
 exports.updateVendor = async (req, res) => {
   const { id } = req.params;
-  const { storeId: _ignoredStoreId, createdBy: _ignoredCreatedBy, ...updateData } = req.body;
-
   try {
     if (!hasStore(req)) return res.status(403).json({ success: false, message: "No store is assigned to this account" });
+    const updateData = {};
+    if (req.body.company_name !== undefined) updateData.company_name = text(req.body.company_name, "Company name", { required: true });
+    if (req.body.category !== undefined) updateData.category = text(req.body.category, "Category") || null;
+    if (req.body.contact_person !== undefined) updateData.contact_person = text(req.body.contact_person, "Contact person") || null;
+    if (req.body.phone !== undefined) updateData.phone = phone(req.body.phone, { required: true });
+    if (req.body.email !== undefined) updateData.email = email(req.body.email) || null;
+    if (req.body.account_manager !== undefined) updateData.account_manager = text(req.body.account_manager, "Account manager") || null;
+    if (req.body.payment_due !== undefined) updateData.payment_due = money(req.body.payment_due, "Payment due");
+    if (req.body.address !== undefined) updateData.address = text(req.body.address, "Address", { max: 500 }) || null;
+    if (req.body.status !== undefined && !["ACTIVE", "INACTIVE"].includes(req.body.status)) return res.status(400).json({ success: false, message: "Invalid vendor status" });
+    if (req.body.status !== undefined) updateData.status = req.body.status;
+    if (!Object.keys(updateData).length) return res.status(400).json({ success: false, message: "No supported fields supplied" });
     // Find vendor by ID and update
     const vendor = await Vendor.findOneAndUpdate(
       { _id: id, ...scopeFor(req) },
@@ -132,6 +127,7 @@ exports.updateVendor = async (req, res) => {
     });
 
   } catch (err) {
+    if (err.status || err.name === "ValidationError") return res.status(err.status || 400).json({ success: false, message: err.message });
     console.error("UPDATE VENDOR ERROR:", err);
     
     // Handle invalid ID format

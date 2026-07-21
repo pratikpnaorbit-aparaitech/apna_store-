@@ -6,6 +6,15 @@ const crypto = require("crypto");
 const User = require("../models/User");
 const Otp = require("../models/Otp");
 const { sendOtpEmail } = require("../utils/emailService");
+const {
+  validateForgotPasswordInput,
+  validateLegacyRegistrationInput,
+  validateRegistrationEmailInput,
+  validateRegistrationInput,
+  validateRegistrationVerificationInput,
+  validateResetPasswordInput,
+  validateUserLoginInput,
+} = require("../utils/authInput");
 
 const verifyToken = require("../middleware/authMiddleware");
 const allowRole = require("../middleware/roleMiddleware");
@@ -26,7 +35,6 @@ function formatUser(user) {
   };
 }
 
-const normalizeEmail = (email = "") => email.trim().toLowerCase();
 const hashOtp = (otp) => crypto.createHash("sha256").update(otp).digest("hex");
 
 async function createAndSendOtp(email, purpose, extraFields = {}) {
@@ -59,26 +67,9 @@ async function createAndSendOtp(email, purpose, extraFields = {}) {
   }
 }
 
-function validateRegistration(body = {}) {
-  const name = String(body.name || "").trim();
-  const email = normalizeEmail(body.email);
-  const mobile = String(body.phone || body.mobile || "").trim();
-  const password = String(body.password || "");
-
-  if (name.length < 2) throw Object.assign(new Error("Please enter your full name"), { status: 400 });
-  if (!/^\S+@\S+\.\S+$/.test(email))
-    throw Object.assign(new Error("Please enter a valid email"), { status: 400 });
-  if (!/^[6-9]\d{9}$/.test(mobile))
-    throw Object.assign(new Error("Please enter a valid 10-digit phone number"), { status: 400 });
-  if (password.length < 6)
-    throw Object.assign(new Error("Password must be at least 6 characters"), { status: 400 });
-
-  return { name, email, mobile, password };
-}
-
 async function sendRegistrationOtpHandler(req, res) {
   try {
-    const registration = validateRegistration(req.body);
+    const registration = validateRegistrationInput(req.body);
     const duplicate = await User.findOne({
       $or: [{ email: registration.email }, { mobile: registration.mobile }],
     }).select("email mobile");
@@ -114,11 +105,7 @@ async function sendRegistrationOtpHandler(req, res) {
 
 async function verifyRegistrationOtpHandler(req, res) {
   try {
-    const email = normalizeEmail(req.body.email);
-    const otp = String(req.body.otp || "").trim();
-    if (!/^\S+@\S+\.\S+$/.test(email) || !/^\d{6}$/.test(otp)) {
-      return res.status(400).json({ success: false, message: "Enter a valid 6-digit OTP" });
-    }
+    const { email, otp } = validateRegistrationVerificationInput(req.body);
     if (!(await verifyOtp(email, "registration", otp))) {
       return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
     }
@@ -162,6 +149,9 @@ async function verifyRegistrationOtpHandler(req, res) {
       user: formatUser(user),
     });
   } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     console.error("VERIFY REGISTRATION OTP ERROR:", error.message);
     if (error?.code === 11000) {
       return res.status(409).json({ success: false, message: "An account with this email or phone number already exists" });
@@ -195,10 +185,7 @@ async function verifyOtp(email, purpose, otp) {
 
 router.post("/registration-otp", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      return res.status(400).json({ message: "Please enter a valid email" });
-    }
+    const { email } = validateRegistrationEmailInput(req.body);
     if (await User.exists({ email })) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -214,10 +201,7 @@ router.post("/registration-otp", async (req, res) => {
 
 router.post("/forgot-password-otp", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      return res.status(400).json({ message: "Please enter a valid email" });
-    }
+    const { email } = validateForgotPasswordInput(req.body);
     if (await User.exists({ email })) {
       await createAndSendOtp(email, "password-reset");
     }
@@ -227,7 +211,7 @@ router.post("/forgot-password-otp", async (req, res) => {
     });
   } catch (error) {
     console.error("FORGOT PASSWORD OTP ERROR:", error.message);
-    res.status(error.status || 500).json({
+    return res.status(error.status || 500).json({
       message: error.status ? error.message : "Could not send OTP. Please try again.",
     });
   }
@@ -235,14 +219,7 @@ router.post("/forgot-password-otp", async (req, res) => {
 
 router.post("/reset-password", async (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
-    const { otp, newPassword } = req.body;
-    if (!/^\d{6}$/.test(String(otp || ""))) {
-      return res.status(400).json({ message: "Enter a valid 6-digit OTP" });
-    }
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
-    }
+    const { email, otp, newPassword } = validateResetPasswordInput(req.body);
     if (!(await verifyOtp(email, "password-reset", otp))) {
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
@@ -254,8 +231,11 @@ router.post("/reset-password", async (req, res) => {
     await Otp.deleteOne({ email, purpose: "password-reset" });
     res.json({ success: true, message: "Password reset successfully" });
   } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error("RESET PASSWORD ERROR:", error.message);
-    res.status(500).json({ message: "Password reset failed" });
+    return res.status(500).json({ message: "Password reset failed" });
   }
 });
 
@@ -320,15 +300,14 @@ router.post(
 /* ================= LOGIN ================= */
 
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
   try {
+    const { email, password } = validateUserLoginInput(req.body);
     const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "User not found"
+        message: "Invalid email or password"
       });
     }
 
@@ -344,7 +323,7 @@ router.post("/login", async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: "Invalid password"
+        message: "Invalid email or password"
       });
     }
 
@@ -364,9 +343,16 @@ router.post("/login", async (req, res) => {
     });
 
   } catch (err) {
+    if (err.status === 400) {
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+      });
+    }
+
     console.error("LOGIN ERROR:", err);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server error"
     });
@@ -408,28 +394,9 @@ router.get("/me", verifyToken, async (req, res) => {
 
 router.post("/register-user", async (req, res) => {
   try {
-    const { name, mobile, password, otp } = req.body;
-    const email = normalizeEmail(req.body.email);
+    const { name, email, mobile, password, otp } = validateLegacyRegistrationInput(req.body);
 
-    if (!name || !email || !mobile || !password || !otp) {
-      return res.status(400).json({
-        message: "All fields are required"
-      });
-    }
-
-    if (!/^[6-9]\d{9}$/.test(mobile)) {
-      return res.status(400).json({
-        message: "Invalid mobile number"
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        message: "Password must be at least 6 characters"
-      });
-    }
-
-    if (!/^\d{6}$/.test(String(otp)) || !(await verifyOtp(email, "registration", otp))) {
+    if (!(await verifyOtp(email, "registration", otp))) {
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
@@ -464,6 +431,9 @@ router.post("/register-user", async (req, res) => {
       user: formatUser(user)
     });
   } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error("User registration error:", error.message);
 
     res.status(500).json({

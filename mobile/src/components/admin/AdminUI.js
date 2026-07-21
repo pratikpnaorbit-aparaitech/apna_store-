@@ -88,7 +88,13 @@ export function StatusPill({ label, tone }) {
 
 export function ActionButton({ icon, label, onPress, danger, disabled }) {
   return (
-    <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.action, danger && styles.actionDanger, disabled && styles.disabled, pressed && styles.pressed]}>
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.action, danger && styles.actionDanger, disabled && styles.disabled, pressed && styles.pressed]}
+    >
       <Ionicons name={icon} size={16} color={danger ? colors.danger : colors.purpleDark} />
       <Text style={[styles.actionText, danger && { color: colors.danger }]}>{label}</Text>
     </Pressable>

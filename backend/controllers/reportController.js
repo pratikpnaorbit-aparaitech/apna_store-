@@ -45,7 +45,7 @@ exports.getStats = async (req, res) => {
       return res.status(403).json({ success: false, message: "No store is assigned to this account" });
     const storeFilter = req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
     const stats = await Transaction.aggregate([
-      { $match: storeFilter },
+      { $match: { status: "SUCCESS", ...storeFilter } },
       {
         $group: {
           _id: null,

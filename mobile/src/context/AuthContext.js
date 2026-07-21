@@ -65,8 +65,10 @@ export function AuthProvider({ children }) {
         if (cachedUser && isKnownRole(cachedUser.role)) setUser(cachedUser);
 
         if (cachedUser?.role === "delivery_partner") {
-          await api.get("/delivery-partners/my-orders");
-          setUser(cachedUser);
+          const { data } = await api.get("/delivery-partners/me");
+          const currentPartner = normalizeDeliveryPartner(data.partner);
+          setUser(currentPartner);
+          await authStorage.setItem("auth_user", JSON.stringify(currentPartner));
           return;
         }
 

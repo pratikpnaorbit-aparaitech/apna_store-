@@ -8,12 +8,13 @@ const STATUS_CONFIG = {
   Placed:             { color: "#3b82f6", bg: "#eff6ff", icon: "🕐", label: "Order Placed" },
   Confirmed:          { color: "#f59e0b", bg: "#fffbeb", icon: "✅", label: "Confirmed" },
   Preparing:          { color: "#f97316", bg: "#fff7ed", icon: "👨‍🍳", label: "Being Prepared" },
+  "Picked Up":       { color: "#0891b2", bg: "#ecfeff", icon: "📦", label: "Picked Up" },
   "Out for Delivery": { color: "#8b5cf6", bg: "#f5f3ff", icon: "🛵", label: "Out for Delivery" },
   Delivered:          { color: "#1a9c3e", bg: "#f0fdf4", icon: "✅", label: "Delivered" },
   Cancelled:          { color: "#ef4444", bg: "#fef2f2", icon: "❌", label: "Cancelled" },
 };
 
-const STEPS = ["Placed", "Confirmed", "Preparing", "Out for Delivery", "Delivered"];
+const STEPS = ["Placed", "Confirmed", "Preparing", "Picked Up", "Out for Delivery", "Delivered"];
 
 const formatAddress = (address) => {
   if (!address) return "";
@@ -190,7 +191,7 @@ export default function MyOrders() {
 
   useEffect(() => {
     fetchOrders();
-    const interval = setInterval(fetchOrders, 30000);
+    const interval = setInterval(fetchOrders, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -202,10 +203,7 @@ export default function MyOrders() {
       const data = Array.isArray(res.data) ? res.data : res.data?.orders || [];
       setOrders(data);
       // Refresh selected order if open
-      if (selected) {
-        const updated = data.find(o => o._id === selected._id);
-        if (updated) setSelected(updated);
-      }
+      setSelected(current => current ? (data.find(order => order._id === current._id) || current) : null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -290,10 +288,10 @@ export default function MyOrders() {
               const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Placed;
               return (
                 <div className="professional-order-card" key={order._id} onClick={() => setSelected(order)}
-                  style={{ background: "white", borderRadius: 16, padding: 16, boxShadow: "0 2px 12px rgba(0,0,0,0.06)", cursor: "pointer", border: order.status === "Out for Delivery" ? "2px solid #8b5cf6" : "2px solid transparent" }}>
+                  style={{ background: "white", borderRadius: 16, padding: 16, boxShadow: "0 2px 12px rgba(0,0,0,0.06)", cursor: "pointer", border: ["Picked Up", "Out for Delivery"].includes(order.status) ? "2px solid #8b5cf6" : "2px solid transparent" }}>
 
                   {/* Live badge for out for delivery */}
-                  {order.status === "Out for Delivery" && (
+                  {["Picked Up", "Out for Delivery"].includes(order.status) && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, background: "#f5f3ff", borderRadius: 20, padding: "4px 10px", width: "fit-content" }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#8b5cf6", display: "inline-block", animation: "livePulse 1.5s infinite" }} />
                       <span style={{ fontSize: 11, fontWeight: 700, color: "#8b5cf6" }}>LIVE TRACKING</span>
@@ -302,7 +300,7 @@ export default function MyOrders() {
 
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, animation: order.status === "Out for Delivery" ? "bounce 1.5s infinite" : "none" }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: cfg.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, animation: ["Picked Up", "Out for Delivery"].includes(order.status) ? "bounce 1.5s infinite" : "none" }}>
                         {cfg.icon}
                       </div>
                       <div>
@@ -354,7 +352,7 @@ export default function MyOrders() {
             <div style={{ padding: "20px" }}>
 
               {/* ── LIVE TRACKING MAP (only when out for delivery) ── */}
-              {selected.status === "Out for Delivery" && selected.deliveryPartnerId && (
+              {["Picked Up", "Out for Delivery"].includes(selected.status) && selected.deliveryPartnerId && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#8b5cf6", animation: "livePulse 1.5s infinite" }} />
@@ -369,7 +367,7 @@ export default function MyOrders() {
               )}
 
               {/* Delivery partner info card (when out for delivery) */}
-              {selected.status === "Out for Delivery" && selected.deliveryPartnerId && (
+              {["Picked Up", "Out for Delivery"].includes(selected.status) && selected.deliveryPartnerId && (
                 <div style={{ background: "#f5f3ff", borderRadius: 14, padding: 14, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ width: 44, height: 44, background: "#8b5cf6", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🏍️</div>
                   <div style={{ flex: 1 }}>

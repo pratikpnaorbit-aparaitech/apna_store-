@@ -43,10 +43,10 @@ export default function RegisterScreen({ navigation }) {
 
   const submit = useCallback(async () => {
     if (loading) return;
-    if (form.name.trim().length < 2) return setError("Please enter your full name.");
-    if (!emailPattern.test(form.email.trim())) return setError("Please enter a valid email address.");
+    if (form.name.trim().length < 2 || form.name.trim().length > 100) return setError("Name must be between 2 and 100 characters.");
+    if (!emailPattern.test(form.email.trim()) || form.email.trim().length > 254) return setError("Please enter a valid email address.");
     if (!/^[6-9]\d{9}$/.test(form.phone)) return setError("Please enter a valid 10-digit phone number.");
-    if (form.password.length < 6) return setError("Password must contain at least 6 characters.");
+    if (form.password.length < 6 || form.password.length > 128) return setError("Password must contain between 6 and 128 characters.");
     if (form.password !== form.confirm) return setError("Passwords do not match.");
 
     Keyboard.dismiss();
@@ -118,11 +118,11 @@ export default function RegisterScreen({ navigation }) {
           <Text style={styles.title}>Create your account</Text>
           <Text style={styles.subtitle}>Fresh products and faster deliveries are one step away.</Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Field label="Full name" icon="person-outline" value={form.name} onChangeText={updateName} autoCapitalize="words" autoComplete="name" textContentType="name" placeholder="Your name" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => emailRef.current?.focus()} />
-          <Field ref={emailRef} label="Email address" icon="mail-outline" value={form.email} onChangeText={updateEmail} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" autoCorrect={false} placeholder="you@example.com" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => phoneRef.current?.focus()} />
+          <Field label="Full name" icon="person-outline" value={form.name} onChangeText={updateName} autoCapitalize="words" autoComplete="name" textContentType="name" placeholder="Your name" maxLength={100} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => emailRef.current?.focus()} />
+          <Field ref={emailRef} label="Email address" icon="mail-outline" value={form.email} onChangeText={updateEmail} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" autoCorrect={false} placeholder="you@example.com" maxLength={254} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => phoneRef.current?.focus()} />
           <Field ref={phoneRef} label="Phone number" icon="call-outline" value={form.phone} onChangeText={updatePhone} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" placeholder="10-digit phone number" maxLength={10} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => passwordRef.current?.focus()} />
-          <Field ref={passwordRef} label="Password" icon="lock-closed-outline" value={form.password} onChangeText={updatePassword} secureTextEntry autoComplete="new-password" textContentType="newPassword" placeholder="Minimum 6 characters" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => confirmRef.current?.focus()} />
-          <Field ref={confirmRef} label="Confirm password" icon="shield-checkmark-outline" value={form.confirm} onChangeText={updateConfirm} secureTextEntry autoComplete="new-password" textContentType="newPassword" placeholder="Enter password again" returnKeyType="done" onSubmitEditing={submit} />
+          <Field ref={passwordRef} label="Password" icon="lock-closed-outline" value={form.password} onChangeText={updatePassword} secureTextEntry autoComplete="new-password" textContentType="newPassword" placeholder="Minimum 6 characters" maxLength={128} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => confirmRef.current?.focus()} />
+          <Field ref={confirmRef} label="Confirm password" icon="shield-checkmark-outline" value={form.confirm} onChangeText={updateConfirm} secureTextEntry autoComplete="new-password" textContentType="newPassword" placeholder="Enter password again" maxLength={128} returnKeyType="done" onSubmitEditing={submit} />
           <PrimaryButton title="Create account" onPress={submit} loading={loading} disabled={loading} />
           <Text style={styles.terms}>By continuing, you agree to our Terms of Service and Privacy Policy.</Text>
         </ScrollView>

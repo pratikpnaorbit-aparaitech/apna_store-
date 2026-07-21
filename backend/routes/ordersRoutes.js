@@ -5,6 +5,7 @@ const Razorpay = require("razorpay");
 const PDFDocument = require("pdfkit");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const Store = require("../models/Store");
 const DeliveryPartner = require("../models/DeliveryPartner");
 const { sendOtpEmail } = require("../utils/emailService");
 const authMiddleware = require("../middleware/authMiddleware");
@@ -14,6 +15,15 @@ const {
   notifyAdmins,
   notifyStore,
 } = require("../utils/inAppNotifications");
+const {
+  canAdminTransition,
+  normalizeAddress,
+  normalizeCouponCode,
+  normalizeCustomerLocation,
+  normalizeOrderItems,
+  normalizePaymentMethod,
+} = require("../utils/orderValidation");
+const { sellableExpiryFilter } = require("../utils/productAvailability");
 
 const router = express.Router();
 const ORDER_STATUSES = [
@@ -97,52 +107,20 @@ function getRazorpay() {
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
 
-function normalizePaymentMethod(value) {
-  const method = String(value || "COD").trim().toLowerCase();
-  if (["cod", "cash", "cash_on_delivery", "cash on delivery"].includes(method))
-    return "COD";
-  if (["razorpay", "online", "upi", "card"].includes(method))
-    return "Razorpay";
-  const error = new Error("Invalid payment method");
-  error.statusCode = 400;
-  throw error;
-}
-
-function normalizeAddress(address = {}, customerLocation) {
-  const normalized = {
-    name: String(address.name || "Customer").trim(),
-    phone: String(address.phone || "").trim(),
-    street: String(address.street || address.address || "").trim(),
-    city: String(address.city || "").trim(),
-    state: String(address.state || "").trim(),
-    pincode: String(address.pincode || address.pinCode || "").trim(),
-  };
-
-  if (normalized.street.length < 5) {
-    const error = new Error("A complete delivery address is required");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (!normalized.city && !normalized.pincode && !customerLocation) {
-    const error = new Error("Please add city, PIN code, or use current location for delivery");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  return normalized;
-}
-
 async function buildOrderPayload(body, userId) {
-  if (!Array.isArray(body.items) || !body.items.length)
-    throw Object.assign(new Error("Order items are required"), {
-      statusCode: 400,
-    });
-  const address = normalizeAddress(body.address, body.customerLocation);
-  const ids = body.items
-    .map((item) => item.productId)
-    .filter(mongoose.isValidObjectId);
-  const products = await Product.find({ _id: { $in: ids }, is_active: 1 });
+  if (!body || typeof body !== "object" || Array.isArray(body))
+    throw Object.assign(new Error("Invalid order request"), { statusCode: 400 });
+  const customerLocation = normalizeCustomerLocation(body.customerLocation);
+  const requestedItems = normalizeOrderItems(body.items);
+  const address = normalizeAddress(body.address, customerLocation);
+  const ids = requestedItems.map((item) => item.productId);
+  if (!ids.every(mongoose.isValidObjectId))
+    throw Object.assign(new Error("One or more product IDs are invalid"), { statusCode: 400 });
+  const products = await Product.find({
+    _id: { $in: ids },
+    is_active: 1,
+    ...sellableExpiryFilter(),
+  });
   if (products.length !== ids.length)
     throw Object.assign(
       new Error("One or more products are no longer available"),
@@ -157,6 +135,9 @@ async function buildOrderPayload(body, userId) {
       { statusCode: 400 },
     );
   const resolvedStoreId = [...storeIds][0];
+  const activeStore = await Store.exists({ _id: resolvedStoreId, isActive: true });
+  if (!activeStore)
+    throw Object.assign(new Error("This store is currently unavailable"), { statusCode: 409 });
   if (body.storeId && String(body.storeId) !== resolvedStoreId)
     throw Object.assign(
       new Error("Cart store does not match the selected products"),
@@ -165,15 +146,10 @@ async function buildOrderPayload(body, userId) {
   const productMap = new Map(
     products.map((product) => [String(product._id), product]),
   );
-  const items = body.items.map((item) => {
+  const items = requestedItems.map((item) => {
     const product = productMap.get(String(item.productId));
-    const quantity = Number(item.quantity);
-    if (
-      !product ||
-      !Number.isInteger(quantity) ||
-      quantity < 1 ||
-      quantity > product.stock
-    ) {
+    const quantity = item.quantity;
+    if (!product || quantity > product.stock) {
       throw Object.assign(
         new Error(
           `Invalid or unavailable product: ${item.name || item.productId}`,
@@ -194,9 +170,7 @@ async function buildOrderPayload(body, userId) {
   );
   const deliveryCharge = 40;
   const gst = Number((itemsTotal * 0.05).toFixed(2));
-  const couponCode = String(body.couponCode || "")
-    .trim()
-    .toUpperCase();
+  const couponCode = normalizeCouponCode(body.couponCode);
   const discount =
     couponCode === "TRY50" && itemsTotal >= 99
       ? Number(Math.min(itemsTotal * 0.5, 150).toFixed(2))
@@ -214,7 +188,7 @@ async function buildOrderPayload(body, userId) {
     totalAmount: Number(
       (itemsTotal + deliveryCharge + gst - discount).toFixed(2),
     ),
-    customerLocation: body.customerLocation,
+    customerLocation,
   };
 }
 
@@ -249,18 +223,24 @@ async function reserveOrderStock(order) {
 
 async function restoreOrderStock(order) {
   if (!order.stockReserved) return;
+  const lockedOrder = await Order.findOneAndUpdate(
+    { _id: order._id, stockReserved: true },
+    { $set: { stockReserved: false } },
+    { returnDocument: "before" },
+  );
+  order.stockReserved = false;
+  if (!lockedOrder) return;
   await Promise.all(
-    order.items.map((item) =>
+    lockedOrder.items.map((item) =>
       Product.findByIdAndUpdate(item.productId, {
         $inc: { stock: item.quantity },
       }),
     ),
   );
-  order.stockReserved = false;
 }
 
 async function orderCreatedNotifications(order) {
-  await Promise.all([
+  const outcomes = await Promise.allSettled([
     createNotification({
       recipientType: "user",
       recipientId: order.userId,
@@ -282,6 +262,10 @@ async function orderCreatedNotifications(order) {
       orderId: order._id,
     }),
   ]);
+  outcomes.forEach((outcome) => {
+    if (outcome.status === "rejected")
+      console.error("Order notification failed:", outcome.reason?.message || outcome.reason);
+  });
 }
 
 router.post(
@@ -356,6 +340,10 @@ router.post(
       } catch (error) {
         order.paymentStatus = "failed";
         order.paymentFailureReason = error.message;
+        order.status = "Cancelled";
+        order.cancellationReason = "Online payment could not be started";
+        order.cancelledBy = "system";
+        order.cancelledAt = new Date();
         await restoreOrderStock(order);
         await order.save();
         throw error;
@@ -387,6 +375,18 @@ router.post(
         return res.status(404).json({ message: "Payment order not found" });
       if (order.paymentStatus === "paid")
         return res.json({ success: true, order });
+      if (order.paymentStatus !== "pending")
+        return res.status(409).json({ message: "This payment is no longer pending" });
+      if (!process.env.RAZORPAY_KEY_SECRET)
+        return res.status(503).json({ message: "Online payment is not configured" });
+      if (
+        typeof razorpay_order_id !== "string" ||
+        typeof razorpay_payment_id !== "string" ||
+        typeof razorpay_signature !== "string" ||
+        !razorpay_payment_id.trim() ||
+        !razorpay_signature.trim()
+      )
+        return res.status(400).json({ message: "Complete payment verification details are required" });
       const expected = crypto
         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
         .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -398,29 +398,52 @@ router.post(
           Buffer.from(String(razorpay_signature || "")),
         );
       if (!valid) {
-        order.paymentStatus = "failed";
-        order.paymentFailureReason = "Signature verification failed";
-        await order.save();
+        const failedOrder = await Order.findOneAndUpdate(
+          { _id: order._id, paymentStatus: "pending" },
+          {
+            $set: {
+              paymentStatus: "failed",
+              paymentFailureReason: "Signature verification failed",
+              status: "Cancelled",
+              cancellationReason: "Online payment verification failed",
+              cancelledBy: "system",
+              cancelledAt: new Date(),
+            },
+          },
+          { returnDocument: "after" },
+        );
+        if (!failedOrder)
+          return res.status(409).json({ message: "Payment state changed. Refresh the order" });
+        await restoreOrderStock(failedOrder);
         return res
           .status(400)
           .json({ message: "Payment signature verification failed" });
       }
-      order.paymentStatus = "paid";
-      order.razorpayPaymentId = razorpay_payment_id;
-      order.paymentFailureReason = null;
-      await order.save();
-      await Promise.all([
-        orderCreatedNotifications(order),
+      const paidOrder = await Order.findOneAndUpdate(
+        { _id: order._id, paymentStatus: "pending", stockReserved: true },
+        {
+          $set: {
+            paymentStatus: "paid",
+            razorpayPaymentId: razorpay_payment_id,
+            paymentFailureReason: null,
+          },
+        },
+        { returnDocument: "after" },
+      );
+      if (!paidOrder)
+        return res.status(409).json({ message: "Payment state changed. Refresh the order" });
+      await Promise.allSettled([
+        orderCreatedNotifications(paidOrder),
         createNotification({
           recipientType: "user",
-          recipientId: order.userId,
+          recipientId: paidOrder.userId,
           title: "Payment successful",
-          message: `Payment of ₹${order.totalAmount.toFixed(2)} was verified.`,
+          message: `Payment of ₹${paidOrder.totalAmount.toFixed(2)} was verified.`,
           type: "payment",
-          orderId: order._id,
+          orderId: paidOrder._id,
         }),
       ]);
-      res.json({ success: true, order });
+      res.json({ success: true, order: paidOrder });
     } catch (error) {
       next(error);
     }
@@ -443,6 +466,10 @@ router.post(
         {
           paymentStatus: state,
           paymentFailureReason: String(req.body.reason || state).slice(0, 300),
+          status: "Cancelled",
+          cancellationReason: state === "cancelled" ? "Online payment was cancelled" : "Online payment failed",
+          cancelledBy: "system",
+          cancelledAt: new Date(),
         },
         { returnDocument: "after" },
       );
@@ -671,9 +698,10 @@ router.post(
       }).populate("userId", "name email mobile");
 
       if (!order) return res.status(404).json({ success: false, message: "Order not found" });
-      if (order.status === "Delivered") {
-        return res.status(400).json({ success: false, message: "Order is already delivered" });
-      }
+      if (order.status !== "Out for Delivery")
+        return res.status(409).json({ success: false, message: "Delivery OTP can be requested only when the order is out for delivery" });
+      if (order.deliveryOtpLastSentAt && Date.now() - order.deliveryOtpLastSentAt.getTime() < 60_000)
+        return res.status(429).json({ success: false, message: "Please wait one minute before requesting another OTP" });
 
       const customerEmail = order.userId?.email;
       if (!customerEmail) {
@@ -685,6 +713,8 @@ router.post(
       order.deliveryOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
       order.deliveryOtpVerifiedAt = null;
       order.deliveryOtpUsed = false;
+      order.deliveryOtpAttempts = 0;
+      order.deliveryOtpLastSentAt = new Date();
       await order.save();
 
       try {
@@ -694,6 +724,8 @@ router.post(
         order.deliveryOtpExpiresAt = null;
         order.deliveryOtpVerifiedAt = null;
         order.deliveryOtpUsed = false;
+        order.deliveryOtpAttempts = 0;
+        order.deliveryOtpLastSentAt = null;
         await order.save();
         throw error;
       }
@@ -722,9 +754,8 @@ router.post(
       }).select("+deliveryOtpHash");
 
       if (!order) return res.status(404).json({ success: false, message: "Order not found" });
-      if (order.status === "Delivered") {
-        return res.status(400).json({ success: false, message: "Order is already delivered" });
-      }
+      if (order.status !== "Out for Delivery")
+        return res.status(409).json({ success: false, message: "Delivery OTP can be verified only when the order is out for delivery" });
       if (!order.deliveryOtpHash || !order.deliveryOtpExpiresAt) {
         return res.status(400).json({ success: false, message: "Delivery OTP was not requested" });
       }
@@ -734,20 +765,46 @@ router.post(
       if (order.deliveryOtpExpiresAt.getTime() < Date.now()) {
         return res.status(400).json({ success: false, message: "Delivery OTP has expired" });
       }
+      if (order.deliveryOtpAttempts >= 5)
+        return res.status(429).json({ success: false, message: "Too many incorrect attempts. Request a new OTP" });
 
       const suppliedHash = Buffer.from(hashDeliveryOtp(otp), "hex");
       const storedHash = Buffer.from(order.deliveryOtpHash, "hex");
       if (suppliedHash.length !== storedHash.length || !crypto.timingSafeEqual(suppliedHash, storedHash)) {
+        order.deliveryOtpAttempts += 1;
+        if (order.deliveryOtpAttempts >= 5) {
+          order.deliveryOtpHash = null;
+          order.deliveryOtpExpiresAt = null;
+        }
+        await order.save();
         return res.status(400).json({ success: false, message: "Invalid delivery OTP" });
       }
 
-      order.deliveryOtpUsed = true;
-      order.deliveryOtpVerifiedAt = new Date();
-      order.status = "Delivered";
-      order.deliveredAt = new Date();
-      await order.save();
+      const completedAt = new Date();
+      const completedOrder = await Order.findOneAndUpdate(
+        {
+          _id: order._id,
+          deliveryPartnerId: req.user.id,
+          status: "Out for Delivery",
+          deliveryOtpUsed: false,
+          deliveryOtpHash: order.deliveryOtpHash,
+        },
+        {
+          $set: {
+            deliveryOtpUsed: true,
+            deliveryOtpVerifiedAt: completedAt,
+            deliveryOtpHash: null,
+            deliveryOtpExpiresAt: null,
+            status: "Delivered",
+            deliveredAt: completedAt,
+          },
+        },
+        { returnDocument: "after" },
+      );
+      if (!completedOrder)
+        return res.status(409).json({ success: false, message: "Order status changed. Refresh before verifying the OTP" });
 
-      await Promise.all([
+      await Promise.allSettled([
         DeliveryPartner.findByIdAndUpdate(req.user.id, {
           isAvailable: true,
           currentOrderId: null,
@@ -755,15 +812,15 @@ router.post(
         }),
         createNotification({
           recipientType: "user",
-          recipientId: order.userId,
+          recipientId: completedOrder.userId,
           title: "Delivery completed",
           message: "Your order was delivered successfully.",
           type: "status",
-          orderId: order._id,
+          orderId: completedOrder._id,
         }),
       ]);
 
-      const safeOrder = await Order.findById(order._id).populate("deliveryPartnerId", "name phone vehicleType");
+      const safeOrder = await Order.findById(completedOrder._id).populate("deliveryPartnerId", "name phone vehicleType");
       res.json({ success: true, message: "Delivery completed successfully", order: safeOrder });
     } catch (error) {
       next(error);
@@ -899,41 +956,64 @@ router.put(
   allowRole(["admin", "staff", "super_admin"]),
   async (req, res, next) => {
     try {
-      if (!ORDER_STATUSES.includes(req.body.status))
+      const nextStatus = typeof req.body.status === "string" ? req.body.status.trim() : "";
+      if (!ORDER_STATUSES.includes(nextStatus))
         return res.status(400).json({ message: "Invalid status" });
-      if (req.body.status === "Delivered") {
+      if (nextStatus === "Delivered") {
         return res.status(400).json({ message: "Delivery must be completed with OTP verification" });
-      }
-      const update = { status: req.body.status };
-      if (req.body.status === "Cancelled") {
-        update.cancellationReason = String(
-          req.body.reason || "Cancelled by store",
-        ).slice(0, 500);
-        update.cancelledBy = req.user.role;
-        update.cancelledAt = new Date();
       }
       if (req.user.role !== "super_admin" && !req.user.storeId)
         return res.status(403).json({ message: "No store is assigned to this account" });
-      const order = await Order.findOneAndUpdate({
+      const scope = {
         _id: req.params.id,
-        status: { $nin: ["Delivered", "Cancelled"] },
         ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
+      };
+      const currentOrder = await Order.findOne(scope).select("status deliveryPartnerId paymentMethod paymentStatus");
+      if (!currentOrder) return res.status(404).json({ message: "Order not found" });
+      if (currentOrder.paymentMethod === "Razorpay" && currentOrder.paymentStatus !== "paid")
+        return res.status(409).json({ message: "An online order can be processed only after payment is verified" });
+      if (!canAdminTransition(currentOrder.status, nextStatus))
+        return res.status(409).json({
+          message: `Order cannot move from ${currentOrder.status} to ${nextStatus}`,
+        });
+
+      const update = { status: nextStatus };
+      if (nextStatus === "Cancelled") {
+        const rawReason = req.body.reason == null ? "Cancelled by store" : req.body.reason;
+        if (typeof rawReason !== "string")
+          return res.status(400).json({ message: "Cancellation reason must be text" });
+        const cancellationReason = rawReason.trim();
+        if (cancellationReason.length < 3)
+          return res.status(400).json({ message: "Please provide a cancellation reason" });
+        update.cancellationReason = cancellationReason.slice(0, 500);
+        update.cancelledBy = req.user.role;
+        update.cancelledAt = new Date();
+      }
+      const order = await Order.findOneAndUpdate({
+        ...scope,
+        status: currentOrder.status,
       }, update, {
         returnDocument: "after",
       }).populate("deliveryPartnerId", "name phone vehicleType");
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      if (req.body.status === "Cancelled") {
+      if (!order)
+        return res.status(409).json({ message: "Order status changed. Refresh before updating it" });
+      if (nextStatus === "Cancelled") {
         await restoreOrderStock(order);
         await order.save();
+        if (currentOrder.deliveryPartnerId)
+          await DeliveryPartner.findOneAndUpdate(
+            { _id: currentOrder.deliveryPartnerId, currentOrderId: order._id },
+            { $set: { isAvailable: true, currentOrderId: null, location: null } },
+          );
       }
-      await createNotification({
+      await Promise.allSettled([createNotification({
         recipientType: "user",
         recipientId: order.userId,
         title: "Order status updated",
         message: `Your order is now ${order.status}.`,
         type: "status",
         orderId: order._id,
-      });
+      })]);
       res.json({ success: true, order });
     } catch (error) {
       next(error);
@@ -949,44 +1029,63 @@ router.put(
     try {
       if (req.user.role !== "super_admin" && !req.user.storeId)
         return res.status(403).json({ message: "No store is assigned to this account" });
-      const partner = await DeliveryPartner.findOne({
-        _id: req.body.deliveryPartnerId,
-        isActive: true,
-        isAvailable: true,
-        ...(req.user.role === "super_admin"
-          ? {}
-          : { $or: [{ storeId: req.user.storeId }, { storeId: null }] }),
-      });
-      if (!partner)
-        return res.status(400).json({ message: "Choose an active delivery partner available to this store" });
+      if (!mongoose.isValidObjectId(req.body.deliveryPartnerId))
+        return res.status(400).json({ message: "Choose a valid delivery partner" });
       const currentOrder = await Order.findOne({
         _id: req.params.id,
         ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
-      }).select("deliveryPartnerId");
+      }).select("deliveryPartnerId status storeId paymentMethod paymentStatus");
       if (!currentOrder) return res.status(404).json({ message: "Order not found" });
+      if (currentOrder.paymentMethod === "Razorpay" && currentOrder.paymentStatus !== "paid")
+        return res.status(409).json({ message: "Delivery cannot be assigned until online payment is verified" });
+      if (!["Placed", "Confirmed", "Preparing"].includes(currentOrder.status))
+        return res.status(409).json({ message: `A delivery partner cannot be assigned while an order is ${currentOrder.status}` });
+
+      const partner = await DeliveryPartner.findOneAndUpdate(
+        {
+          _id: req.body.deliveryPartnerId,
+          isActive: true,
+          $and: [
+            { $or: [{ storeId: currentOrder.storeId }, { storeId: null }] },
+            { $or: [{ isAvailable: true }, { currentOrderId: currentOrder._id }] },
+          ],
+        },
+        { $set: { isAvailable: false, currentOrderId: currentOrder._id } },
+        { returnDocument: "before" },
+      );
+      if (!partner)
+        return res.status(400).json({ message: "Choose an active delivery partner available to this store" });
+
+      const previousPartnerId = currentOrder.deliveryPartnerId;
+      const newlyClaimed = String(partner.currentOrderId || "") !== String(currentOrder._id);
+      const nextOrderStatus = currentOrder.status === "Placed" ? "Confirmed" : currentOrder.status;
       const order = await Order.findOneAndUpdate(
         {
           _id: req.params.id,
+          status: currentOrder.status,
+          deliveryPartnerId: previousPartnerId || null,
           ...(req.user.role === "super_admin" ? {} : { storeId: req.user.storeId }),
         },
         {
-          $set: { deliveryPartnerId: req.body.deliveryPartnerId, status: "Confirmed" },
+          $set: { deliveryPartnerId: req.body.deliveryPartnerId, status: nextOrderStatus },
           $unset: { deliveryPartnerLocation: 1 },
         },
         { returnDocument: "after" },
       ).populate("deliveryPartnerId", "name phone vehicleType vehicleNumber");
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      if (currentOrder.deliveryPartnerId && String(currentOrder.deliveryPartnerId) !== String(partner._id)) {
-        await DeliveryPartner.findByIdAndUpdate(currentOrder.deliveryPartnerId, {
-          isAvailable: true,
-          currentOrderId: null,
-        });
+      if (!order) {
+        if (newlyClaimed)
+          await DeliveryPartner.findOneAndUpdate(
+            { _id: partner._id, currentOrderId: currentOrder._id },
+            { $set: { isAvailable: true, currentOrderId: null } },
+          );
+        return res.status(409).json({ message: "Order changed. Refresh before assigning delivery" });
       }
-      await DeliveryPartner.findByIdAndUpdate(partner._id, {
-        isAvailable: false,
-        currentOrderId: req.params.id,
-      });
-      await Promise.all([
+      if (previousPartnerId && String(previousPartnerId) !== String(partner._id))
+        await DeliveryPartner.findOneAndUpdate(
+          { _id: previousPartnerId, currentOrderId: currentOrder._id },
+          { $set: { isAvailable: true, currentOrderId: null, location: null } },
+        );
+      await Promise.allSettled([
         createNotification({
           recipientType: "delivery",
           recipientId: req.body.deliveryPartnerId,

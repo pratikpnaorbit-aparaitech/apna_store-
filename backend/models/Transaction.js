@@ -8,8 +8,14 @@ const transactionSchema = new mongoose.Schema({
   gst: { type: Number, required: true, min: 0 },
   payment_provider: { type: String, default: 'POS' },
   total: { type: Number, required: true },
-  payment_mode: { type: String, required: true },
-  status: { type: String, default: 'SUCCESS' },
+  payment_mode: { type: String, enum: ['CASH', 'UPI', 'CARD', 'WALLET'], required: true },
+  cash_received: { type: Number, default: null, min: 0 },
+  change_returned: { type: Number, default: null, min: 0 },
+  status: { type: String, enum: ['SUCCESS', 'REVERSED'], default: 'SUCCESS', index: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  refundedAt: { type: Date, default: null },
+  refundedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  refundReason: { type: String, default: null, maxlength: 500 },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });

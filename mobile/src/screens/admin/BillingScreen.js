@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Screen from "../../components/Screen";
@@ -42,7 +43,7 @@ export default function BillingScreen({ navigation }) {
     } catch (loadError) { setError(messageFromError(loadError, "Products are unavailable for billing.")); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   useEffect(() => {
     let active = true;

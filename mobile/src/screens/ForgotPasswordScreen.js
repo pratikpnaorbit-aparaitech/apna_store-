@@ -69,11 +69,11 @@ export default function ForgotPasswordScreen({ navigation }) {
           <Text style={styles.subtitle}>{step === 1 ? "We’ll send a secure reset code to your registered email." : `Enter the code sent to ${form.email}.`}</Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {step === 1 ? (
-            <Field label="Email address" icon="mail-outline" value={form.email} onChangeText={updateEmail} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" autoCorrect={false} returnKeyType="send" onSubmitEditing={send} />
+            <Field label="Email address" icon="mail-outline" value={form.email} onChangeText={updateEmail} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" autoCorrect={false} maxLength={254} returnKeyType="send" onSubmitEditing={send} />
           ) : (
             <>
               <Field label="6-digit code" icon="key-outline" value={form.otp} onChangeText={updateOtp} keyboardType="number-pad" inputMode="numeric" maxLength={6} returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => passwordRef.current?.focus()} />
-              <Field ref={passwordRef} label="New password" icon="lock-closed-outline" value={form.password} onChangeText={updatePassword} secureTextEntry autoComplete="new-password" textContentType="newPassword" returnKeyType="done" onSubmitEditing={reset} />
+              <Field ref={passwordRef} label="New password" icon="lock-closed-outline" value={form.password} onChangeText={updatePassword} secureTextEntry autoComplete="new-password" textContentType="newPassword" maxLength={128} returnKeyType="done" onSubmitEditing={reset} />
             </>
           )}
           <PrimaryButton title={step === 1 ? "Send reset code" : "Reset password"} onPress={step === 1 ? send : reset} loading={loading} disabled={loading} />

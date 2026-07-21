@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { FaMotorcycle, FaEye, FaEyeSlash } from "react-icons/fa";
-
-const API = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api" });
+import { PUBLIC_API as API } from "../../services/api";
+import { clearAuthSession } from "../../services/session";
 
 export default function DeliveryLogin() {
   const navigate = useNavigate();
@@ -20,6 +19,7 @@ export default function DeliveryLogin() {
     try {
       const res = await API.post("/delivery-partners/login", { phone, password });
       const { token, partner } = res.data;
+      clearAuthSession();
       localStorage.setItem("dp_token", token);
       localStorage.setItem("dp_user", JSON.stringify(partner));
       window.location.href = "/delivery-dashboard";

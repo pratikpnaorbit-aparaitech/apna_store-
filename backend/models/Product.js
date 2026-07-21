@@ -6,6 +6,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: [true, "Product name is required"],
       trim: true,
+      maxlength: 120,
     },
 
     sku: {
@@ -13,12 +14,14 @@ const productSchema = new mongoose.Schema(
       required: [true, "SKU is required"],
       unique: true,
       trim: true,
+      maxlength: 80,
     },
 
     category: {
       type: String,
       required: [true, "Category is required"],
       trim: true,
+      maxlength: 80,
     },
 
     price: {
@@ -83,6 +86,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: null,
+      maxlength: 2000,
     },
 
     storeId: {

@@ -6,6 +6,7 @@ const path = require("path");
 const mongoose = require("mongoose");
 const fs = require("fs");
 const deliveryPartnerRoutes = require("./routes/deliveryPartnerRoutes");
+const { createCorsOptions } = require("./config/cors");
 require("dotenv").config();
 
 const storeRoutes = require("./routes/storeRoutes");
@@ -75,29 +76,7 @@ const smsLimiter = rateLimit({
 /* ======================
    CORS CONFIG
 ====================== */
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',') 
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8081', 'http://localhost:19006', 'http://192.168.1.23:8081', 'http://192.168.1.23:19006', 'http://192.168.1.23:8081', 'http://192.168.1.23:19006'];
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  res.setHeader("Access-Control-Allow-Origin", origin || "*");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-
-  next();
-});
+app.use(cors(createCorsOptions()));
 
 /* ======================
    SECURITY & MIDDLEWARE

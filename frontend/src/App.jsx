@@ -62,6 +62,7 @@ import Home from "./pages/Home"; // Public landing page
 import Sidebar from "./components/layout/Sidebar";
 import Topbar from "./components/layout/Topbar";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+import DeliveryProtectedRoute from "./components/common/DeliveryProtectedRoute";
 import ChatBot from "./components/user/ChatBot";
 import "./assets/styles/thermal.css";
 
@@ -209,7 +210,9 @@ function App() {
 
       {/* Delivery partner dashboard */}
       <Route path="/delivery-dashboard" element={
-        localStorage.getItem("dp_token") ? <DeliveryDashboard /> : <Navigate to="/delivery-login" replace />
+        <DeliveryProtectedRoute>
+          <DeliveryDashboard />
+        </DeliveryProtectedRoute>
       } />
 
 

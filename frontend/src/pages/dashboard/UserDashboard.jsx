@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import {
   FaSearch, FaShoppingCart, FaMapMarkerAlt, FaChevronDown,
   FaStar, FaHeart, FaRegHeart, FaFire, FaClock,
@@ -9,8 +8,7 @@ import {
 import { IoFlash } from "react-icons/io5";
 import CartDrawer from "../../components/user/CartDrawer";
 import defaultStoreCover from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
-
-const PUBLIC = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api" });
+import { PUBLIC_API as PUBLIC } from "../../services/api";
 
 // Category emoji map — shown only for categories that exist in DB
 const CATEGORY_EMOJI = {

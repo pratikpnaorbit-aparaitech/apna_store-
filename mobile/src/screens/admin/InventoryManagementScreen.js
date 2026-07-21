@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Screen from "../../components/Screen";
 import { ActionButton, AdminHeader, EmptyBlock, ErrorBlock, LoadingBlock, SearchBox, StatusPill, adminStyles } from "../../components/admin/AdminUI";
@@ -9,6 +10,7 @@ import { useAuth } from "../../context/AuthContext";
 import { ROLE_LABELS, ROLES } from "../../navigation/roleConfig";
 import { colors } from "../../theme";
 import { useToast } from "../../context/ToastContext";
+import { confirmAction } from "../../utils/confirmAction";
 
 const EMPTY = {
   name: "", sku: "", category: "", price: "", discount_price: "", stock: "",
@@ -52,7 +54,9 @@ export default function InventoryManagementScreen({ navigation }) {
     }
   }, [superAdmin]);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => {
+    load();
+  }, [load]));
 
   const shown = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -105,11 +109,15 @@ export default function InventoryManagementScreen({ navigation }) {
       setFormError("Name, SKU, category, price and stock are required.");
       return;
     }
-    if (Number(form.price) < 0 || Number(form.stock) < 0 || (form.discount_price && Number(form.discount_price) < 0)) {
-      setFormError("Price, discount and stock cannot be negative.");
+    const price = Number(form.price);
+    const stock = Number(form.stock);
+    const reorderLevel = Number(form.reorder_level || 5);
+    const discountPrice = form.discount_price === "" ? null : Number(form.discount_price);
+    if (!Number.isFinite(price) || price < 0 || !Number.isInteger(stock) || stock < 0 || !Number.isInteger(reorderLevel) || reorderLevel < 0 || (discountPrice != null && (!Number.isFinite(discountPrice) || discountPrice < 0))) {
+      setFormError("Use valid non-negative amounts and whole numbers for stock and reorder level.");
       return;
     }
-    if (form.discount_price && Number(form.discount_price) > Number(form.price)) {
+    if (discountPrice != null && discountPrice > price) {
       setFormError("Discount price cannot be greater than the regular price.");
       return;
     }
@@ -137,10 +145,10 @@ export default function InventoryManagementScreen({ navigation }) {
         name: form.name.trim(),
         sku: form.sku.trim(),
         category: form.category.trim(),
-        price: Number(form.price),
-        discount_price: form.discount_price === "" ? null : Number(form.discount_price),
-        stock: Number(form.stock),
-        reorder_level: Number(form.reorder_level || 5),
+        price,
+        discount_price: discountPrice,
+        stock,
+        reorder_level: reorderLevel,
         image_url: imageUrl,
       };
       if (editing) await api.put(`/inventory/${editing.id || editing._id}`, payload);
@@ -155,24 +163,22 @@ export default function InventoryManagementScreen({ navigation }) {
     }
   };
 
-  const archive = (item) => Alert.alert(
-    "Archive product?",
-    `${item.name} will no longer be available for sale.`,
-    [
-      { text: "Keep", style: "cancel" },
-      {
-        text: "Archive", style: "destructive", onPress: async () => {
-          try {
-            await api.delete(`/inventory/${item.id || item._id}`);
-            setProducts((current) => current.filter((product) => (product.id || product._id) !== (item.id || item._id)));
-            showToast({ title: "Product archived", message: item.name });
-          } catch (archiveError) {
-            Alert.alert("Archive failed", messageFromError(archiveError));
-          }
-        },
-      },
-    ],
-  );
+  const archive = (item) => confirmAction({
+    title: "Archive product?",
+    message: `${item.name} will no longer be available for sale.`,
+    cancelText: "Keep",
+    confirmText: "Archive",
+    destructive: true,
+    onConfirm: async () => {
+      try {
+        await api.delete(`/inventory/${item.id || item._id}`);
+        setProducts((current) => current.filter((product) => (product.id || product._id) !== (item.id || item._id)));
+        showToast({ title: "Product archived", message: item.name });
+      } catch (archiveError) {
+        Alert.alert("Archive failed", messageFromError(archiveError));
+      }
+    },
+  });
 
   return (
     <Screen>
@@ -181,7 +187,7 @@ export default function InventoryManagementScreen({ navigation }) {
         subtitle={`${products.length} active products`}
         roleLabel={ROLE_LABELS[user?.role]}
         onBack={() => navigation.goBack()}
-        right={canMutate ? <View style={styles.headerActions}><Pressable onPress={() => navigation.navigate("AdminBulkInventory")} style={styles.add}><Ionicons name="cloud-upload-outline" size={20} color="white" /></Pressable><Pressable onPress={openCreate} style={styles.add}><Ionicons name="add" size={24} color="white" /></Pressable></View> : null}
+        right={canMutate ? <View style={styles.headerActions}><Pressable onPress={() => navigation.navigate("AdminBulkInventory")} style={styles.add} accessibilityRole="button" accessibilityLabel="Bulk upload inventory"><Ionicons name="cloud-upload-outline" size={20} color="white" /></Pressable><Pressable onPress={openCreate} style={styles.add} accessibilityRole="button" accessibilityLabel="Add product"><Ionicons name="add" size={24} color="white" /></Pressable></View> : null}
       />
       <SearchBox value={search} onChangeText={setSearch} placeholder="Search name, SKU, category or store" />
       {loading ? <LoadingBlock label="Loading inventory…" /> : error ? <ErrorBlock message={error} onRetry={load} /> : (
@@ -219,9 +225,9 @@ export default function InventoryManagementScreen({ navigation }) {
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={adminStyles.modalTitle}>{editing ? "Edit product" : "Add product"}</Text>
               {formError ? <Text style={styles.formError}>{formError}</Text> : null}
-              <FormInput label="Product name *" value={form.name} onChangeText={(value) => setForm((old) => ({ ...old, name: value }))} />
-              <FormInput label="SKU *" value={form.sku} onChangeText={(value) => setForm((old) => ({ ...old, sku: value }))} autoCapitalize="characters" />
-              <FormInput label="Category *" value={form.category} onChangeText={(value) => setForm((old) => ({ ...old, category: value }))} />
+              <FormInput label="Product name *" value={form.name} maxLength={120} onChangeText={(value) => setForm((old) => ({ ...old, name: value }))} />
+              <FormInput label="SKU *" value={form.sku} maxLength={80} onChangeText={(value) => setForm((old) => ({ ...old, sku: value }))} autoCapitalize="characters" />
+              <FormInput label="Category *" value={form.category} maxLength={80} onChangeText={(value) => setForm((old) => ({ ...old, category: value }))} />
               <View style={styles.twoCols}>
                 <View style={{ flex: 1 }}><FormInput label="Price *" value={form.price} onChangeText={(value) => setForm((old) => ({ ...old, price: value }))} keyboardType="decimal-pad" /></View>
                 <View style={{ flex: 1 }}><FormInput label="Discount" value={form.discount_price} onChangeText={(value) => setForm((old) => ({ ...old, discount_price: value }))} keyboardType="decimal-pad" /></View>
@@ -233,8 +239,8 @@ export default function InventoryManagementScreen({ navigation }) {
               <Text style={adminStyles.label}>Unit</Text>
               <View style={styles.chips}>{UNITS.map((unit) => <Choice key={unit} label={unit} selected={form.unit === unit} onPress={() => setForm((old) => ({ ...old, unit }))} />)}</View>
               <FormInput label="Expiry date (YYYY-MM-DD)" value={form.expiryDate} onChangeText={(value) => setForm((old) => ({ ...old, expiryDate: value }))} />
-              <FormInput label="Image URL (optional)" value={form.image_url} onChangeText={(value) => setForm((old) => ({ ...old, image_url: value }))} autoCapitalize="none" />
-              <Pressable onPress={pickImage} style={styles.imagePicker}>
+              <FormInput label="Image URL (optional)" value={form.image_url} maxLength={2048} onChangeText={(value) => setForm((old) => ({ ...old, image_url: value }))} autoCapitalize="none" />
+              <Pressable onPress={pickImage} style={styles.imagePicker} accessibilityRole="button" accessibilityLabel="Choose product image">
                 {imageAsset?.uri || form.image_url ? <Image source={{ uri: imageAsset?.uri || form.image_url }} style={styles.imagePreview} /> : <View style={styles.imagePlaceholder}><Ionicons name="image-outline" size={25} color={colors.purple} /></View>}
                 <View style={{ flex: 1 }}><Text style={styles.imageTitle}>{imageAsset ? "New image selected" : "Choose product image"}</Text><Text style={styles.imageSub}>JPG, PNG or WebP • max 5 MB</Text></View>
                 <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -245,13 +251,13 @@ export default function InventoryManagementScreen({ navigation }) {
                   <View style={styles.storeChoices}>{stores.map((store) => <Choice key={store._id} label={store.name} selected={form.storeId === store._id} onPress={() => setForm((old) => ({ ...old, storeId: store._id }))} />)}</View>
                 </>
               ) : null}
-              <Pressable onPress={() => setForm((old) => ({ ...old, is_featured: !old.is_featured }))} style={styles.toggle}>
+              <Pressable onPress={() => setForm((old) => ({ ...old, is_featured: !old.is_featured }))} style={styles.toggle} accessibilityRole="checkbox" accessibilityLabel="Feature this product in the storefront" accessibilityState={{ checked: form.is_featured }}>
                 <Ionicons name={form.is_featured ? "checkbox" : "square-outline"} size={23} color={colors.purple} />
                 <Text style={styles.toggleText}>Feature this product in the storefront</Text>
               </Pressable>
               <View style={adminStyles.modalActions}>
-                <Pressable disabled={saving} onPress={() => setModalOpen(false)} style={adminStyles.cancelButton}><Text style={adminStyles.cancelText}>Cancel</Text></Pressable>
-                <Pressable disabled={saving} onPress={save} style={adminStyles.saveButton}>{saving ? <ActivityIndicator color="white" /> : <Text style={adminStyles.saveText}>Save product</Text>}</Pressable>
+                <Pressable disabled={saving} onPress={() => setModalOpen(false)} style={adminStyles.cancelButton} accessibilityRole="button" accessibilityLabel="Cancel"><Text style={adminStyles.cancelText}>Cancel</Text></Pressable>
+                <Pressable disabled={saving} onPress={save} style={adminStyles.saveButton} accessibilityRole="button" accessibilityLabel="Save product">{saving ? <ActivityIndicator color="white" /> : <Text style={adminStyles.saveText}>Save product</Text>}</Pressable>
               </View>
             </ScrollView>
           </View>
@@ -266,11 +272,11 @@ function Metric({ label, value }) {
 }
 
 function FormInput({ label, ...props }) {
-  return <View><Text style={adminStyles.label}>{label}</Text><TextInput {...props} placeholderTextColor="#9AA39D" style={adminStyles.input} /></View>;
+  return <View><Text style={adminStyles.label}>{label}</Text><TextInput {...props} accessibilityLabel={label} placeholderTextColor="#9AA39D" style={adminStyles.input} /></View>;
 }
 
 function Choice({ label, selected, onPress }) {
-  return <Pressable onPress={onPress} style={[styles.choice, selected && styles.choiceSelected]}><Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{label}</Text></Pressable>;
+  return <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }} style={[styles.choice, selected && styles.choiceSelected]}><Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{label}</Text></Pressable>;
 }
 
 const styles = StyleSheet.create({

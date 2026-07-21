@@ -21,7 +21,10 @@ function Billing() {
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
 
   /* BILL */
-  const [billGenerated, setBillGenerated] = useState(false);
+  const [bill, setBill] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const billGenerated = Boolean(bill);
 
   /* ================= LOAD PRODUCTS ================= */
   useEffect(() => {
@@ -29,14 +32,13 @@ function Billing() {
   }, []);
 
   const loadProducts = async () => {
-    const res = await API.get("/inventory");
-    setProducts(
-      res.data.map(p => ({
-        ...p,
-        price: Number(p.price),
-        stock: Number(p.stock)
-      }))
-    );
+    try {
+      const res = await API.get("/inventory");
+      setProducts(res.data.map(p => ({ ...p, price: Number(p.price), stock: Number(p.stock) })));
+      setLoadError("");
+    } catch (error) {
+      setLoadError(error.response?.data?.message || "Products are unavailable for billing.");
+    }
   };
 
   /* ================= FIND CUSTOMER ================= */
@@ -83,18 +85,13 @@ function Billing() {
         ? p.price * (1 - discountPercent / 100)
         : p.price;
 
-    const exists = cart.find(i => i.productId === p.id);
-
-    if (exists) {
-      setCart(cart.map(i =>
-        i.productId === p.id
-          ? { ...i, qty: i.qty + 1, total: (i.qty + 1) * finalPrice }
-          : i
-      ));
-    } else {
-      setCart([
-        ...cart,
-        {
+    setCart(current => {
+      const exists = current.find(i => i.productId === p.id);
+      if (exists) {
+        if (exists.qty >= p.stock) return current;
+        return current.map(i => i.productId === p.id ? { ...i, qty: i.qty + 1, total: (i.qty + 1) * finalPrice } : i);
+      }
+      return [...current, {
           productId: p.id,
           name: p.name,
           qty: 1,
@@ -102,9 +99,8 @@ function Billing() {
           price: finalPrice,
           discountPercent,
           total: finalPrice
-        }
-      ]);
-    }
+        }];
+    });
   };
 
   /* ================= TOTALS ================= */
@@ -118,13 +114,14 @@ function Billing() {
       : 0;
 
   /* ================= UPI QR ================= */
-  const upiId = "7410781884@ibl";
+  const upiId = import.meta.env.VITE_STORE_UPI_ID || "7410781884@ibl";
   const upiPayUrl = `upi://pay?pa=${upiId}&pn=SmartStore&am=${grandTotal.toFixed(
     2
   )}&cu=INR&tn=SmartStore%20Purchase`;
 
   /* ================= GENERATE BILL ================= */
   const generateBill = async () => {
+    if (saving) return;
     if (!cart.length) return alert("Cart is empty");
     if (!phone || phone.length !== 10) return alert("Enter customer mobile");
 
@@ -140,7 +137,8 @@ function Billing() {
       return alert("Enter customer name");
 
     try {
-      await API.post("/billing", {
+      setSaving(true);
+      const { data } = await API.post("/billing", {
         phone,
         paymentMode,
         joinLoyalty,
@@ -152,17 +150,31 @@ function Billing() {
         }))
       });
 
-      setBillGenerated(true);
-      alert("✅ Bill Generated & WhatsApp Sent");
+      setBill(data);
+      await loadProducts();
+      alert(`✅ Bill ${data.billNo} generated successfully`);
     } catch (err) {
       alert(err.response?.data?.message || "Billing failed");
+    } finally {
+      setSaving(false);
     }
   };
 
   /* ================= PRINT + RESET ================= */
   const handlePrint = () => {
     window.print();
-    setTimeout(() => window.location.reload(), 300);
+  };
+
+  const resetBill = () => {
+    setBill(null);
+    setCart([]);
+    setPhone("");
+    setCustomer(null);
+    setJoinLoyalty(false);
+    setNewCustomer({ name: "", email: "" });
+    setPaymentMode("CASH");
+    setCashReceived("");
+    setPaymentConfirmed(false);
   };
 
   /* ================= CART CONTROLS ================= */
@@ -206,6 +218,7 @@ const decreaseQty = (item) => {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* PRODUCTS */}
       <div className="lg:col-span-2 space-y-4">
+        {loadError ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{loadError} <button onClick={loadProducts} className="ml-2 underline">Retry</button></div> : null}
         <input
           className="border p-3 rounded-xl w-full"
           placeholder="Search / Scan product"
@@ -282,6 +295,7 @@ const decreaseQty = (item) => {
         {/* HEADER */}
         <div className="text-center">
           <p className="font-bold">SMARTSTORE</p>
+          {bill?.billNo ? <p className="text-xs font-semibold text-green-700">Bill {bill.billNo}</p> : null}
           <p className="text-xs">Thank you for shopping</p>
           <hr />
         </div>
@@ -453,17 +467,13 @@ const decreaseQty = (item) => {
         {!billGenerated ? (
           <button
             onClick={generateBill}
-            className="bg-green-600 text-white w-full py-3 rounded"
+            disabled={saving}
+            className="bg-green-600 text-white w-full py-3 rounded disabled:opacity-50"
           >
-            Generate Bill
+            {saving ? "Generating…" : "Generate Bill"}
           </button>
         ) : (
-          <button
-            onClick={handlePrint}
-            className="border w-full py-3 rounded"
-          >
-            🖨 Print
-          </button>
+          <div className="grid grid-cols-2 gap-2"><button onClick={handlePrint} className="border w-full py-3 rounded">🖨 Print</button><button onClick={resetBill} className="bg-green-600 text-white w-full py-3 rounded">New bill</button></div>
         )}
         </div>
       </div>

@@ -8,6 +8,8 @@ function BulkUploadInventory() {
   const [loading, setLoading] = useState(false);
   const [stores, setStores] = useState([]);
   const [storeId, setStoreId] = useState("");
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
   const navigate = useNavigate();
   const role = (() => { try { return JSON.parse(localStorage.getItem("user") || "{}").role; } catch { return ""; } })();
   const isSuperAdmin = role === "super_admin";
@@ -19,11 +21,19 @@ function BulkUploadInventory() {
 
   const handleUpload = async () => {
     if (!file) {
-      alert("Please select a CSV file");
+      setError("Please select a CSV file.");
       return;
     }
     if (isSuperAdmin && !storeId) {
-      alert("Please select the owning store");
+      setError("Please select the owning store.");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setError("Only CSV files are supported.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("CSV file must be 5 MB or smaller.");
       return;
     }
 
@@ -33,20 +43,20 @@ function BulkUploadInventory() {
 
     try {
       setLoading(true);
+      setError("");
+      setResult(null);
       const res = await API.post(
         "/bulk-upload/inventory",
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      alert(
-        `Bulk Upload Successful ✅\n\nInserted: ${res.data.inserted}\nFailed: ${res.data.failed}`
-      );
-
-      // Redirect to inventory after success
-      navigate("/inventory");
-    } catch {
-      alert("Bulk upload failed ❌");
+      setResult(res.data);
+      setFile(null);
+      const input = document.getElementById("csvUpload");
+      if (input) input.value = "";
+    } catch (uploadError) {
+      setError(uploadError.response?.data?.message || "The inventory CSV could not be imported.");
     } finally {
       setLoading(false);
     }
@@ -76,10 +86,26 @@ function BulkUploadInventory() {
           </p>
           <ul className="list-disc list-inside text-gray-600 space-y-1">
             <li>name, sku, category, price, stock, expiry</li>
-            <li>Category must match predefined categories</li>
-            <li>Expiry format: YYYY-MM-DD</li>
+            <li>Optional: discount_price, unit, reorder_level, description, image_url, is_featured</li>
+            <li>Expiry format: YYYY-MM-DD • maximum 1,000 rows / 5 MB</li>
           </ul>
+          <a
+            href={'data:text/csv;charset=utf-8,name%2Csku%2Ccategory%2Cprice%2Cstock%2Cexpiry%2Cdiscount_price%2Cunit%2Creorder_level%2Cdescription%2Cimage_url%2Cis_featured%0ASample%20Product%2CSAMPLE-001%2CGrocery%2C10%2C5%2C%2C8%2Cpiece%2C2%2C%2C%2Cfalse'}
+            download="inventory-sample.csv"
+            className="mt-3 inline-flex font-semibold text-blue-600 hover:text-blue-700"
+          >
+            Download sample CSV
+          </a>
         </div>
+
+        {error && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {result && (
+          <div className="mb-5 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+            <p className="font-bold">Bulk upload completed</p>
+            <p className="mt-1">Inserted: {result.inserted} • Failed: {result.failed} • Total: {result.total}</p>
+            {result.errors?.length > 0 && <ul className="mt-2 list-disc pl-5">{result.errors.map(item => <li key={`${item.row}-${item.sku}`}>Row {item.row}{item.sku ? ` (${item.sku})` : ""}: {item.message}</li>)}</ul>}
+          </div>
+        )}
 
         {/* File Upload */}
         {isSuperAdmin && (
@@ -95,7 +121,7 @@ function BulkUploadInventory() {
           <input
             type="file"
             accept=".csv"
-            onChange={e => setFile(e.target.files[0])}
+            onChange={e => { setFile(e.target.files[0] || null); setError(""); setResult(null); }}
             className="hidden"
             id="csvUpload"
           />
@@ -118,9 +144,9 @@ function BulkUploadInventory() {
         <div className="mt-6 flex gap-3">
           <button
             onClick={handleUpload}
-            disabled={loading}
+            disabled={loading || !file || (isSuperAdmin && !storeId)}
             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white font-semibold transition
-              ${loading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
+              ${loading || !file || (isSuperAdmin && !storeId) ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
           >
             {loading ? "Uploading..." : <><CheckCircle size={18} /> Upload</>}
           </button>
@@ -129,7 +155,7 @@ function BulkUploadInventory() {
             onClick={() => navigate("/inventory")}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-gray-300 text-gray-600 hover:bg-gray-100 transition"
           >
-            <X size={18} /> Cancel
+            <X size={18} /> {result ? "View Inventory" : "Cancel"}
           </button>
         </div>
 

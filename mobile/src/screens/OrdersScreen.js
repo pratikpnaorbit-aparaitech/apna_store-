@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Screen from "../components/Screen";
 import StateView from "../components/StateView";
@@ -70,9 +71,10 @@ export default function OrdersScreen({ navigation }) {
   const [otherReason, setOtherReason] = useState("");
   const [cancelError, setCancelError] = useState("");
 
-  const load = useCallback(async (refresh = false) => {
+  const load = useCallback(async (refresh = false, silent = false) => {
     if (!userId) return;
-    refresh ? setRefreshing(true) : setLoading(true);
+    if (refresh) setRefreshing(true);
+    else if (!silent) setLoading(true);
     try {
       const { data } = await api.get(`/orders/user/${userId}`);
       setOrders(Array.isArray(data) ? data : []);
@@ -85,11 +87,11 @@ export default function OrdersScreen({ navigation }) {
     }
   }, [userId]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     load();
-    const timer = setInterval(() => load(true), 30000);
+    const timer = setInterval(() => load(false, true), 15000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load]));
 
   const counts = useMemo(() => ({
     active: orders.filter(isActive).length,

@@ -67,7 +67,8 @@ async function sendOtpEmail({ email, otp, purpose }) {
 
   // A Brevo REST API key (xkeysib-...) is different from an SMTP key.
   // Prefer the REST API when it is configured; SMTP remains available as fallback.
-  if (process.env.BREVO_API_KEY) {
+  const forceSmtp = String(process.env.EMAIL_TRANSPORT || "").trim().toLowerCase() === "smtp";
+  if (process.env.BREVO_API_KEY && !forceSmtp) {
     const senderEmail = getSenderEmail();
     if (!senderEmail) throw new Error("MAIL_FROM_EMAIL is not configured");
 

@@ -3,33 +3,27 @@ const Customer = require("../models/Customer");
 const Transaction = require("../models/Transaction");
 const TransactionItem = require("../models/TransactionItem");
 const LoyaltyHistory = require("../models/LoyaltyHistory");
+const Store = require("../models/Store");
 const mongoose = require('mongoose');
+const crypto = require("crypto");
 const { sendWhatsApp } = require("../utils/notificationService");
+const { validateBillingInput } = require("../utils/billingInput");
+
+const billingError = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
 exports.createBill = async (req, res) => {
-  const {
-    paymentMode,
-    items,
-    phone,
-    joinLoyalty,
-    newCustomer,
-    cashReceived
-  } = req.body;
-
-  /* ======================
-     BASIC VALIDATION
-  ====================== */
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ message: "Cart is empty" });
+  let input;
+  try {
+    input = validateBillingInput(req.body);
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ message: error.message });
   }
-  if (!["CASH", "UPI", "CARD", "WALLET"].includes(paymentMode)) {
-    return res.status(400).json({ message: "Choose a valid payment mode" });
-  }
+  const { paymentMode, items, phone, joinLoyalty, newCustomer, cashReceived, storeId } = input;
   if (req.user.role !== "super_admin" && !req.user.storeId) {
     return res.status(403).json({ message: "No store is assigned to this account" });
   }
 
-  let billingStoreId = req.user.storeId || null;
+  let billingStoreId = req.user.role === "super_admin" ? (storeId || null) : req.user.storeId;
 
   // Start MongoDB session for transaction
   const session = await mongoose.startSession();
@@ -87,10 +81,6 @@ exports.createBill = async (req, res) => {
     const billItems = [];
 
     for (const i of items) {
-      if (!i.productId || !i.qty || i.qty <= 0) {
-        throw new Error("Invalid cart data");
-      }
-
       // Find product with stock lock (using session)
       const product = await Product.findOne({ 
         _id: i.productId,
@@ -98,16 +88,16 @@ exports.createBill = async (req, res) => {
         ...(req.user.role === "super_admin" ? {} : { storeId: billingStoreId }),
       }).session(session);
 
-      if (!product) throw new Error("Product not found");
-      if (!product.storeId) throw new Error(`${product.name} is not assigned to a store`);
+      if (!product) throw billingError("Product not found");
+      if (!product.storeId) throw billingError(`${product.name} is not assigned to a store`);
       if (!billingStoreId) billingStoreId = product.storeId;
       if (String(product.storeId) !== String(billingStoreId)) {
-        throw new Error("All billed products must belong to the same store");
+        throw billingError("All billed products must belong to the same store");
       }
       
       // Check stock
       if (product.stock < i.qty) {
-        throw new Error(`Insufficient stock for ${product.name}`);
+        throw billingError(`Insufficient stock for ${product.name}`, 409);
       }
 
       // Calculate expiry days
@@ -124,9 +114,9 @@ exports.createBill = async (req, res) => {
       let discountPercent = 0;
 
       if (daysLeft < 0) {
-        throw new Error(`${product.name} is expired`);
+        throw billingError(`${product.name} is expired`, 409);
       } else if (daysLeft === 0) {
-        throw new Error(`${product.name} expires today`);
+        throw billingError(`${product.name} expires today`, 409);
       } else if (daysLeft <= 1) {
         discountPercent = 50;
       } else if (daysLeft <= 3) {
@@ -156,16 +146,19 @@ exports.createBill = async (req, res) => {
         productId: product._id
       });
 
-      i._validatedPrice = finalPrice;
-      i._lineTotal = lineTotal;
+      i.validatedPrice = finalPrice;
+      i.lineTotal = lineTotal;
     }
+
+    if (!billingStoreId || !(await Store.exists({ _id: billingStoreId, isActive: true }).session(session)))
+      throw billingError("Choose a valid active store");
 
     subtotal = Number(subtotal.toFixed(2));
     const gst = Number((subtotal * 0.18).toFixed(2));
     const total = Number((subtotal + gst).toFixed(2));
 
     if (paymentMode === "CASH" && (!Number.isFinite(Number(cashReceived)) || Number(cashReceived) < total)) {
-      throw new Error(`Cash received must be at least ₹${total.toFixed(2)}`);
+      throw billingError(`Cash received must be at least ₹${total.toFixed(2)}`);
     }
 
     if (customerId && billingStoreId) {
@@ -178,7 +171,7 @@ exports.createBill = async (req, res) => {
     /* ======================
        4️⃣ CREATE TRANSACTION
     ====================== */
-    const billNo = "SS-" + Date.now();
+    const billNo = `SS-${Date.now()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 
     const [transaction] = await Transaction.create([{
       bill_no: billNo,
@@ -189,7 +182,10 @@ exports.createBill = async (req, res) => {
       payment_mode: paymentMode,
       payment_provider: 'POS',
       storeId: billingStoreId,
-      status: 'SUCCESS'
+      status: 'SUCCESS',
+      createdBy: req.user.id,
+      cash_received: paymentMode === "CASH" ? cashReceived : null,
+      change_returned: paymentMode === "CASH" ? Number((cashReceived - total).toFixed(2)) : null,
     }], { session });
 
     const transactionId = transaction._id;
@@ -202,16 +198,18 @@ exports.createBill = async (req, res) => {
       await TransactionItem.create([{
         transaction_id: transactionId,
         product_id: i.productId,
-        price: i._validatedPrice,
+        price: i.validatedPrice,
         quantity: i.qty,
-        total: i._lineTotal
+        total: i.lineTotal
       }], { session });
 
-      // Update product stock
-      await Product.updateOne(
-        { _id: i.productId },
+      // Conditional decrement protects against stale carts and concurrent bills.
+      const stockUpdate = await Product.updateOne(
+        { _id: i.productId, storeId: billingStoreId, is_active: 1, stock: { $gte: i.qty } },
         { $inc: { stock: -i.qty } }
       ).session(session);
+      if (stockUpdate.matchedCount !== 1)
+        throw billingError("Stock changed while billing. Refresh products and try again", 409);
     }
 
     /* ======================
@@ -246,7 +244,6 @@ exports.createBill = async (req, res) => {
 
     // Commit the transaction
     await session.commitTransaction();
-    session.endSession();
 
     /* ======================
        7️⃣ WHATSAPP RECEIPT WITH PAYMENT DETAILS
@@ -322,16 +319,28 @@ Visit Again!
     res.json({
       success: true,
       billNo,
+      transactionId,
+      subtotal,
+      gst,
       total,
-      pointsAdded
+      paymentMode,
+      cashReceived: paymentMode === "CASH" ? cashReceived : null,
+      changeReturned: paymentMode === "CASH" ? Number((cashReceived - total).toFixed(2)) : null,
+      pointsAdded,
+      items: billItems,
     });
 
   } catch (err) {
     // Rollback transaction on error
-    await session.abortTransaction();
-    session.endSession();
+    if (session.inTransaction()) await session.abortTransaction();
     
-    console.error("CREATE BILL ERROR:", err);
-    res.status(400).json({ message: err.message });
+    const conflict = err.code === 112 || err.hasErrorLabel?.("TransientTransactionError");
+    if (!err.statusCode && !conflict && err.name !== "ValidationError" && err.name !== "CastError")
+      console.error("CREATE BILL ERROR:", err);
+    res.status(err.statusCode || (conflict ? 409 : err.name === "ValidationError" || err.name === "CastError" ? 400 : 500)).json({
+      message: err.statusCode || conflict || err.name === "ValidationError" || err.name === "CastError" ? err.message : "Billing failed. Please try again",
+    });
+  } finally {
+    await session.endSession();
   }
 };

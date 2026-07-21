@@ -13,8 +13,6 @@
       "package": "com.aparaitech.smartstore",
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
@@ -50,8 +48,9 @@
     "extra": {
       "apiUrl": "https://apna-store-ol1t.onrender.com/api",
       "eas": {
-        "projectId": "cf7f7c86-b60d-4e06-b7db-072b1ec6d7f8"
+        "projectId": "dc81b945-d098-4e4b-b0f8-e0630ab1ee8b"
       }
-    }
+    },
+    "owner": "yuvi1173"
   }
 }

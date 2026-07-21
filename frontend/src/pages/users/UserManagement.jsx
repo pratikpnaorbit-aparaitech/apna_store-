@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom"; 
 import { API } from "../../services/api";
+import { clearAuthSession } from "../../services/session";
 
 function UserManagement({ roleFilter = null }) {
   const navigate = useNavigate(); 
@@ -92,7 +93,7 @@ function UserManagement({ roleFilter = null }) {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
+    clearAuthSession();
     window.location.href = "/login";
   };
 

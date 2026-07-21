@@ -122,6 +122,7 @@ export default function LoginScreen({ navigation }) {
             autoCorrect={false}
             autoComplete="username"
             textContentType="username"
+            maxLength={254}
             placeholder="you@example.com or 9876543210"
             returnKeyType="next"
             blurOnSubmit={false}
@@ -137,6 +138,7 @@ export default function LoginScreen({ navigation }) {
             secureTextEntry
             autoComplete="current-password"
             textContentType="password"
+            maxLength={128}
             placeholder="Enter your password"
             returnKeyType="go"
             onSubmitEditing={submit}

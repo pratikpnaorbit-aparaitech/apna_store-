@@ -1,8 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const Product = require("../models/Product");
+const Store = require("../models/Store");
+const mongoose = require("mongoose");
 const authMiddleware = require("../middleware/authMiddleware");
 const allowRoles = require("../middleware/roleMiddleware");
+const requireStoreContext = require("../middleware/storeContextMiddleware");
+const inventoryController = require("../controllers/inventoryController");
 
 const uploadUrl = (req, filename) => `${req.protocol}://${req.get("host")}/uploads/${encodeURIComponent(filename)}`;
 
@@ -43,7 +47,13 @@ router.get("/", async (req, res) => {
     const { category, storeId, search } = req.query;
     let query = { is_active: 1 };
     if (category) query.category = category;
-    if (storeId)  query.storeId  = storeId;
+    if (storeId) {
+      if (!mongoose.isValidObjectId(storeId)) return res.status(400).json({ message: "Invalid store ID" });
+      if (!(await Store.exists({ _id: storeId, isActive: true }))) return res.json([]);
+      query.storeId = storeId;
+    } else {
+      query.storeId = { $in: await Store.find({ isActive: true }).distinct("_id") };
+    }
     if (search)   query.name     = { $regex: search, $options: "i" };
 
     const products = await Product.find(query)
@@ -62,7 +72,8 @@ router.get("/", async (req, res) => {
 router.get("/category/:category", async (req, res) => {
   try {
     const category = decodeURIComponent(req.params.category);
-    const products = await Product.find({ category, is_active: 1 })
+    const activeStoreIds = await Store.find({ isActive: true }).distinct("_id");
+    const products = await Product.find({ category, is_active: 1, storeId: { $in: activeStoreIds } })
       .populate("storeId", "name categories");
     res.json(products.map((product) => productResponse(product, req)));
   } catch (error) {
@@ -75,9 +86,10 @@ router.get("/category/:category", async (req, res) => {
 ========================= */
 router.get("/:id", async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
-      .populate("storeId", "name categories");
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid product ID" });
+    const product = await Product.findOne({ _id: req.params.id, is_active: 1 })
+      .populate({ path: "storeId", match: { isActive: true }, select: "name categories" });
+    if (!product?.storeId) return res.status(404).json({ message: "Product not found" });
     res.json(productResponse(product, req));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -92,32 +104,8 @@ router.post(
   "/",
   authMiddleware,
   allowRoles(["admin", "super_admin"]),
-  async (req, res) => {
-    try {
-      const { name, price, category, image, image_url, description, storeId, sku, stock } = req.body;
-
-      if (!name || !price || !category) {
-        return res.status(400).json({ message: "name, price and category are required" });
-      }
-
-      const newProduct = new Product({
-        name, price, category,
-        image:       image     || null,
-        image_url:   image_url || null,
-        description: description || null,
-        storeId:     storeId   || null,
-        sku:         sku       || `SKU-${Date.now()}`,
-        stock:       stock     || 0,
-        is_active:   1,
-        createdBy:   req.user.id,
-      });
-
-      const saved = await newProduct.save();
-      res.status(201).json(saved);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  requireStoreContext,
+  inventoryController.addProduct,
 );
 
 module.exports = router;

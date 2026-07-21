@@ -6,10 +6,18 @@ const STATUS_COLORS = {
   Placed:             "bg-blue-100 text-blue-700",
   Confirmed:          "bg-yellow-100 text-yellow-700",
   Preparing:          "bg-orange-100 text-orange-700",
+  "Picked Up":       "bg-cyan-100 text-cyan-700",
   "Out for Delivery": "bg-purple-100 text-purple-700",
   Delivered:          "bg-green-100 text-green-700",
   Cancelled:          "bg-red-100 text-red-700",
 };
+
+const ADMIN_NEXT_STATUSES = {
+  Placed: ["Confirmed", "Cancelled"],
+  Confirmed: ["Preparing", "Cancelled"],
+  Preparing: ["Cancelled"],
+};
+const isProcessable = (order) => order?.paymentMethod !== "Razorpay" || order?.paymentStatus === "paid";
 
 // Helper: safely format address object or string
 const formatAddress = (address) => {
@@ -27,24 +35,30 @@ export default function AdminOrders() {
   const [deliveryPartners, setDeliveryPartners] = useState([]);
   const [assigning, setAssigning] = useState(false);
   const [filterStatus, setFilterStatus] = useState("All");
+  const [busyOrderId, setBusyOrderId] = useState("");
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const storeId = user.storeId?._id || user.storeId;
+  const canAssign = ["admin", "super_admin"].includes(user.role);
 
   useEffect(() => {
     fetchOrders();
-    fetchDeliveryPartners();
+    if (canAssign) fetchDeliveryPartners();
+    const interval = setInterval(() => fetchOrders(false), 15000);
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const res = await API.get(user.role === "super_admin" ? "/orders/all" : `/orders/store/${storeId}`);
-      setOrders(res.data || []);
+      const freshOrders = res.data || [];
+      setOrders(freshOrders);
+      setSelectedOrder(current => current ? (freshOrders.find(order => order._id === current._id) || current) : null);
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -58,31 +72,35 @@ export default function AdminOrders() {
   };
 
   const updateStatus = async (orderId, status) => {
+    if (busyOrderId) return;
+    let reason;
+    if (status === "Cancelled") {
+      reason = window.prompt("Why is this order being cancelled?")?.trim();
+      if (!reason) return;
+      if (reason.length < 3) return alert("Enter a cancellation reason of at least 3 characters.");
+    } else if (!window.confirm(`Move this order to ${status}?`)) return;
     try {
-      await API.put(`/orders/${orderId}/status`, { status });
-      setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status } : o));
-      if (selectedOrder?._id === orderId) setSelectedOrder(prev => ({ ...prev, status }));
+      setBusyOrderId(orderId);
+      const { data } = await API.put(`/orders/${orderId}/status`, { status, reason });
+      setOrders(prev => prev.map(o => o._id === orderId ? data.order : o));
+      if (selectedOrder?._id === orderId) setSelectedOrder(data.order);
     } catch (err) {
-      alert("Failed to update status");
+      alert(err.response?.data?.message || "Failed to update status");
+    } finally {
+      setBusyOrderId("");
     }
   };
 
   const assignDeliveryPartner = async (orderId, partnerId) => {
     try {
       setAssigning(true);
-      await API.put(`/orders/${orderId}/assign-delivery`, { deliveryPartnerId: partnerId });
-      setOrders(prev => prev.map(o => {
-        if (o._id !== orderId) return o;
-        const partner = deliveryPartners.find(p => p._id === partnerId);
-        return { ...o, deliveryPartnerId: partner, status: "Confirmed" };
-      }));
-      if (selectedOrder?._id === orderId) {
-        const partner = deliveryPartners.find(p => p._id === partnerId);
-        setSelectedOrder(prev => ({ ...prev, deliveryPartnerId: partner, status: "Confirmed" }));
-      }
+      const { data } = await API.put(`/orders/${orderId}/assign-delivery`, { deliveryPartnerId: partnerId });
+      setOrders(prev => prev.map(o => o._id === orderId ? data.order : o));
+      if (selectedOrder?._id === orderId) setSelectedOrder(data.order);
+      await fetchDeliveryPartners();
       alert("Delivery partner assigned! ✅");
     } catch (err) {
-      alert("Failed to assign delivery partner");
+      alert(err.response?.data?.message || "Failed to assign delivery partner");
     } finally {
       setAssigning(false);
     }
@@ -104,7 +122,7 @@ export default function AdminOrders() {
     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
   });
 
-  const statuses = ["All", "Placed", "Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
+  const statuses = ["All", "Placed", "Confirmed", "Preparing", "Picked Up", "Out for Delivery", "Delivered", "Cancelled"];
   const filtered = filterStatus === "All" ? orders : orders.filter(o => o.status === filterStatus);
   const newOrders = orders.filter(o => o.status === "Placed").length;
 
@@ -234,22 +252,19 @@ export default function AdminOrders() {
               <div>
                 <p className="text-xs font-semibold text-slate-500 mb-2">Update Status</p>
                 <div className="flex flex-wrap gap-2">
-                  {["Confirmed", "Preparing", "Cancelled"].map(s => (
+                  {(isProcessable(selectedOrder) ? (ADMIN_NEXT_STATUSES[selectedOrder.status] || []) : []).map(s => (
                     <button key={s} onClick={() => updateStatus(selectedOrder._id, s)}
-                      disabled={selectedOrder.status === s}
-                      className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition ${
-                        selectedOrder.status === s
-                          ? STATUS_COLORS[s] + " border-transparent"
-                          : "border-slate-200 text-slate-500 hover:border-indigo-300"
-                      }`}>
+                      disabled={busyOrderId === selectedOrder._id}
+                      className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition disabled:opacity-50 ${s === "Cancelled" ? "border-red-200 text-red-600 hover:border-red-400" : "border-slate-200 text-slate-500 hover:border-indigo-300"}`}>
                       {s}
                     </button>
                   ))}
+                  {!isProcessable(selectedOrder) ? <p className="text-xs font-semibold text-red-500">Online payment is not verified; this order cannot be processed.</p> : !(ADMIN_NEXT_STATUSES[selectedOrder.status] || []).length ? <p className="text-xs text-slate-400">This status is controlled by the delivery workflow.</p> : null}
                 </div>
               </div>
 
               {/* Assign delivery partner */}
-              <div className="bg-orange-50 rounded-xl p-4">
+              {canAssign && isProcessable(selectedOrder) && ["Placed", "Confirmed", "Preparing"].includes(selectedOrder.status) ? <div className="bg-orange-50 rounded-xl p-4">
                 <p className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-3">
                   <Truck className="w-4 h-4 text-orange-500" /> Assign Delivery Partner
                 </p>
@@ -272,14 +287,18 @@ export default function AdminOrders() {
                     className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-400 bg-white"
                     defaultValue="">
                     <option value="">Select delivery partner...</option>
-                    {deliveryPartners.map(p => (
+                    {deliveryPartners.filter(p => {
+                      const orderStoreId = selectedOrder.storeId?._id || selectedOrder.storeId;
+                      const partnerStoreId = p.storeId?._id || p.storeId;
+                      return p.isActive && p.isAvailable && (!partnerStoreId || String(partnerStoreId) === String(orderStoreId || ""));
+                    }).map(p => (
                       <option key={p._id} value={p._id}>
                         🏍️ {p.name} • {p.phone} • {p.vehicleType}
                       </option>
                     ))}
                   </select>
                 )}
-              </div>
+              </div> : null}
 
               {/* Customer & Address — safe rendering */}
               <div>

@@ -1,26 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Screen from "../components/Screen";
 import { useAuth } from "../context/AuthContext";
 import { useAddress } from "../context/AddressContext";
 import { colors, shadow } from "../theme";
 import { useRequireAuth } from "../hooks/useRequireAuth";
+import { confirmLogout as requestLogoutConfirmation } from "../utils/confirmLogout";
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
   const { addresses } = useAddress();
   const requireAuth = useRequireAuth(navigation);
 
-  const confirmLogout = () => Alert.alert("Logout", "Are you sure you want to logout?", [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: "Logout",
-      style: "destructive",
-      onPress: async () => {
-        await logout();
-      },
-    },
-  ]);
+  const confirmLogout = () => requestLogoutConfirmation({
+    message: "Are you sure you want to logout?",
+    onConfirm: logout,
+  });
 
   const rows = [
     { icon: "receipt-outline", title: "My orders", sub: "Track, cancel and review orders", onPress: () => requireAuth({ name: "Orders" }) },

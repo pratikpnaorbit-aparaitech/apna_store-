@@ -26,6 +26,7 @@ function Field({ label, error, icon, secureTextEntry, inputStyle, autoCapitalize
         <TextInput
           ref={setInputRef}
           {...inputProps}
+          accessibilityLabel={inputProps.accessibilityLabel || label}
           placeholderTextColor="#A19AA9"
           style={[styles.input, inputStyle]}
           secureTextEntry={hidden}
