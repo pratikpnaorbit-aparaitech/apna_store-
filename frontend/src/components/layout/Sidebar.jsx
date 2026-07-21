@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Store, UserCheck, UserCircle, Truck,
   Package, ShoppingCart, BarChart2, ChevronRight, LifeBuoy
 } from "lucide-react";
+import { clearAuthSession } from "../../services/session";
 
 /* ── Super admin menu — only routes that actually exist in App.jsx ── */
 const superAdminMenu = [
@@ -60,7 +61,7 @@ function Sidebar() {
   const isStaff      = role === "staff";
 
   const handleLogout = () => {
-    localStorage.clear();
+    clearAuthSession();
     window.location.href = "/login";
   };
 

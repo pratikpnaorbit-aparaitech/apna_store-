@@ -1,13 +1,15 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { FaMotorcycle, FaSignOutAlt, FaMapMarkerAlt, FaPhone } from "react-icons/fa";
 import { CheckCircle, Truck, MapPin, Bug } from "lucide-react";
 import NotificationMenu from "../../components/common/NotificationMenu";
+import { DELIVERY_API as API } from "../../services/api";
+import { clearAuthSession } from "../../services/session";
 
 const STATUS_COLORS = {
   Confirmed:          "bg-yellow-100 text-yellow-700",
   Preparing:          "bg-orange-100 text-orange-700",
+  "Picked Up":       "bg-cyan-100 text-cyan-700",
   "Out for Delivery": "bg-blue-100 text-blue-700",
   Delivered:          "bg-green-100 text-green-700",
 };
@@ -125,21 +127,20 @@ export default function DeliveryDashboard() {
   const dpToken = localStorage.getItem("dp_token");
   const partnerData = JSON.parse(localStorage.getItem("dp_user") || "{}");
 
-  const API = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
-    headers: { Authorization: `Bearer ${dpToken}` }
-  });
-
   useEffect(() => {
     const dp = localStorage.getItem("dp_user");
     if (!dp || !dpToken) { navigate("/login?role=delivery"); return; }
     setPartner(JSON.parse(dp));
     fetchOrders();
-    return () => stopLocationSharing();
+    const orderInterval = setInterval(() => fetchOrders(false), 15000);
+    return () => {
+      clearInterval(orderInterval);
+      stopLocationSharing();
+    };
   }, []);
 
   useEffect(() => {
-    const hasActiveDelivery = orders.some(o => o.status === "Out for Delivery");
+    const hasActiveDelivery = orders.some(o => ["Picked Up", "Out for Delivery"].includes(o.status));
     if (hasActiveDelivery) startLocationSharing();
     else stopLocationSharing();
   }, [orders]);
@@ -238,23 +239,23 @@ export default function DeliveryDashboard() {
     );
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const res = await API.get("/delivery-partners/my-orders");
       setOrders(res.data?.data || []);
     } catch (err) {
       if (err.response?.status === 401) navigate("/login?role=delivery");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   const updateStatus = async (orderId, status) => {
     try {
       setUpdating(orderId);
-      await API.put(`/delivery-partners/order/${orderId}/status`, { status });
-      setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status } : o));
+      const { data } = await API.put(`/delivery-partners/order/${orderId}/status`, { status });
+      setOrders(prev => prev.map(o => o._id === orderId ? (data.order || { ...o, status }) : o));
     } catch (err) {
       alert(err.response?.data?.message || "Failed to update status");
     } finally {
@@ -298,8 +299,7 @@ export default function DeliveryDashboard() {
 
   const logout = () => {
     stopLocationSharing();
-    localStorage.removeItem("dp_token");
-    localStorage.removeItem("dp_user");
+    clearAuthSession();
     navigate("/login?role=delivery");
   };
 
@@ -553,11 +553,18 @@ export default function DeliveryDashboard() {
 
                     <div className="p-4">
                       {(order.status === "Confirmed" || order.status === "Preparing") ? (
+                        <button onClick={() => updateStatus(order._id, "Picked Up")}
+                          disabled={updating === order._id}
+                          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition disabled:opacity-50">
+                          <Truck className="w-4 h-4" />
+                          {updating === order._id ? "Updating..." : "Confirm Pick Up"}
+                        </button>
+                      ) : order.status === "Picked Up" ? (
                         <button onClick={() => updateStatus(order._id, "Out for Delivery")}
                           disabled={updating === order._id}
                           className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition disabled:opacity-50">
                           <Truck className="w-4 h-4" />
-                          {updating === order._id ? "Updating..." : "Pick Up / Out for Delivery"}
+                          {updating === order._id ? "Updating..." : "Start Delivery"}
                         </button>
                       ) : order.status === "Out for Delivery" ? (
                         <div className="space-y-3">

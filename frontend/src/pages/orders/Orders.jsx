@@ -3,12 +3,19 @@ import { API } from "../../services/api";
 import { FaEye, FaTimes } from "react-icons/fa";
 import { Download, MapPin, Package } from "lucide-react";
 
-const STATUS_OPTIONS = ["Placed", "Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
+const STATUS_OPTIONS = ["Placed", "Confirmed", "Preparing", "Picked Up", "Out for Delivery", "Delivered", "Cancelled"];
+const ADMIN_NEXT_STATUSES = {
+  Placed: ["Confirmed", "Cancelled"],
+  Confirmed: ["Preparing", "Cancelled"],
+  Preparing: ["Cancelled"],
+};
+const isProcessable = (order) => order?.paymentMethod !== "Razorpay" || order?.paymentStatus === "paid";
 
 const STATUS_COLORS = {
   Placed:               "bg-blue-100 text-blue-700",
   Confirmed:            "bg-yellow-100 text-yellow-700",
   Preparing:            "bg-orange-100 text-orange-700",
+  "Picked Up":         "bg-cyan-100 text-cyan-700",
   "Out for Delivery":   "bg-purple-100 text-purple-700",
   Delivered:            "bg-green-100 text-green-700",
   Cancelled:            "bg-red-100 text-red-700",
@@ -30,17 +37,23 @@ export default function Orders() {
   const [updatingId, setUpdatingId] = useState(null);
   const [filterStatus, setFilterStatus] = useState("All");
 
-  useEffect(() => { fetchOrders(); }, []);
+  useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(() => fetchOrders(false), 15000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const res = await API.get("/orders/all");
-      setOrders(res.data || []);
+      const freshOrders = res.data || [];
+      setOrders(freshOrders);
+      setSelectedOrder(current => current ? (freshOrders.find(order => order._id === current._id) || current) : null);
     } catch (error) {
       console.error("Error fetching orders", error);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -49,12 +62,13 @@ export default function Orders() {
       setUpdatingId(orderId);
       const reason = newStatus === "Cancelled" ? window.prompt("Enter cancellation reason for the customer and store:") : null;
       if (newStatus === "Cancelled" && !reason?.trim()) return;
+      if (newStatus !== "Cancelled" && !window.confirm(`Move this order to ${newStatus}?`)) return;
       const { data } = await API.put(`/orders/${orderId}/status`, { status: newStatus, reason: reason?.trim() });
       const updated = data.order || { ...selectedOrder, status: newStatus };
       setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
       if (selectedOrder?._id === orderId) setSelectedOrder(updated);
     } catch (err) {
-      alert("Failed to update status");
+      alert(err.response?.data?.message || "Failed to update status");
     } finally {
       setUpdatingId(null);
     }
@@ -84,7 +98,7 @@ export default function Orders() {
       <h1 className="text-2xl font-black text-slate-800 mb-6">All Orders</h1>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
         {STATUS_OPTIONS.map(s => (
           <div key={s} className={`rounded-xl p-3 text-center cursor-pointer border-2 transition ${
             filterStatus === s ? "border-purple-500 bg-purple-50" : "border-transparent bg-white"
@@ -182,17 +196,14 @@ export default function Orders() {
               <div>
                 <label className="text-xs font-semibold text-slate-500 mb-2 block">Update Status</label>
                 <div className="flex flex-wrap gap-2">
-                  {STATUS_OPTIONS.map(s => (
+                  {(isProcessable(selectedOrder) ? (ADMIN_NEXT_STATUSES[selectedOrder.status] || []) : []).map(s => (
                     <button key={s} onClick={() => updateStatus(selectedOrder._id, s)}
                       disabled={updatingId === selectedOrder._id}
-                      className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition ${
-                        selectedOrder.status === s
-                          ? STATUS_COLORS[s] + " border-transparent"
-                          : "border-slate-200 text-slate-500 hover:border-purple-300"
-                      }`}>
+                      className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition disabled:opacity-50 ${s === "Cancelled" ? "border-red-200 text-red-600 hover:border-red-400" : "border-slate-200 text-slate-500 hover:border-purple-300"}`}>
                       {s}
                     </button>
                   ))}
+                  {!isProcessable(selectedOrder) ? <p className="text-xs font-semibold text-red-500">Online payment is not verified; this order cannot be processed.</p> : !(ADMIN_NEXT_STATUSES[selectedOrder.status] || []).length ? <p className="text-xs text-slate-400">This status is controlled by the delivery workflow.</p> : null}
                 </div>
               </div>
 

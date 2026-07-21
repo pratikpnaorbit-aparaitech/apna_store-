@@ -16,7 +16,7 @@ const loyaltyHistorySchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['EARNED', 'REDEEMED'],
+        enum: ['EARNED', 'REDEEMED', 'REVERSED'],
         required: true
     }
 }, {

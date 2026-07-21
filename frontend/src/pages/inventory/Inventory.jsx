@@ -32,13 +32,14 @@ function Inventory() {
   const [showAdd, setShowAdd] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
+  const [savingProduct, setSavingProduct] = useState(false);
 
   // Current store's type — determines whether expiry field is visible
   const [currentStoreType, setCurrentStoreType] = useState(null);
 
   const emptyForm = {
     name: "", sku: "", category: "", price: "", discount_price: "",
-    stock: "", unit: "kg", reorder_level: "5", expiryDate: "", is_featured: false, image_url: ""
+    stock: "", unit: "kg", reorder_level: "5", expiryDate: "", is_featured: false, image_url: "", storeId: ""
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -98,15 +99,26 @@ function Inventory() {
 
   const handleAdd = async () => {
     try {
-      if (!form.name || !form.sku || !form.category || !form.price || !form.stock) {
+      if (!form.name.trim() || !form.sku.trim() || !form.category.trim() || form.price === "" || form.stock === "") {
         alert("Please fill all required fields"); return;
       }
+      if (!Number.isFinite(Number(form.price)) || Number(form.price) < 0 || !Number.isInteger(Number(form.stock)) || Number(form.stock) < 0) {
+        alert("Price and stock must be valid non-negative numbers"); return;
+      }
+      if (form.discount_price !== "" && Number(form.discount_price) > Number(form.price)) {
+        alert("Discount price cannot be greater than the regular price"); return;
+      }
+      if (isSuperAdmin && !form.storeId) {
+        alert("Choose the store that owns this product"); return;
+      }
+      setSavingProduct(true);
       await API.post("/inventory", {
         ...form,
+        name: form.name.trim(), sku: form.sku.trim(), category: form.category.trim(),
         price: Number(form.price),
-        discount_price: form.discount_price ? Number(form.discount_price) : null,
+        discount_price: form.discount_price === "" ? null : Number(form.discount_price),
         stock: Number(form.stock),
-        reorder_level: Number(form.reorder_level) || 5,
+        reorder_level: form.reorder_level === "" ? 5 : Number(form.reorder_level),
         // Only send expiryDate if this store type actually uses it
         expiryDate: showExpiry ? (form.expiryDate || null) : null,
       });
@@ -115,23 +127,38 @@ function Inventory() {
       loadProducts();
     } catch (err) {
       alert(err.response?.data?.message || "Add product failed ❌");
+    } finally {
+      setSavingProduct(false);
     }
   };
 
   const handleUpdate = async () => {
     try {
+      if (!editProduct.name?.trim() || !editProduct.sku?.trim() || !editProduct.category?.trim() || editProduct.price === "" || editProduct.stock === "") {
+        alert("Please fill all required fields"); return;
+      }
+      if (!Number.isFinite(Number(editProduct.price)) || Number(editProduct.price) < 0 || !Number.isInteger(Number(editProduct.stock)) || Number(editProduct.stock) < 0) {
+        alert("Price and stock must be valid non-negative numbers"); return;
+      }
+      if (editProduct.discount_price !== "" && editProduct.discount_price != null && Number(editProduct.discount_price) > Number(editProduct.price)) {
+        alert("Discount price cannot be greater than the regular price"); return;
+      }
+      setSavingProduct(true);
       await API.put(`/inventory/${editProduct.id}`, {
         ...editProduct,
+        name: editProduct.name.trim(), sku: editProduct.sku.trim(), category: editProduct.category.trim(),
         price: Number(editProduct.price),
-        discount_price: editProduct.discount_price ? Number(editProduct.discount_price) : null,
+        discount_price: editProduct.discount_price === "" || editProduct.discount_price == null ? null : Number(editProduct.discount_price),
         stock: Number(editProduct.stock),
-        reorder_level: Number(editProduct.reorder_level) || 5,
+        reorder_level: editProduct.reorder_level === "" || editProduct.reorder_level == null ? 5 : Number(editProduct.reorder_level),
         expiryDate: showExpiry ? (editProduct.expiryDate || null) : null,
       });
       setShowEdit(false);
       loadProducts();
     } catch (err) {
       alert(err.response?.data?.message || "Update failed ❌");
+    } finally {
+      setSavingProduct(false);
     }
   };
 
@@ -197,7 +224,7 @@ function Inventory() {
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition">
               <Upload size={16} /> Bulk Upload
             </button>
-            <button onClick={() => { setForm(emptyForm); setShowAdd(true); }}
+            <button onClick={() => { setForm({ ...emptyForm, storeId: storeFilter }); setShowAdd(true); }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition">
               <Plus size={16} /> Add Product
             </button>
@@ -308,7 +335,7 @@ function Inventory() {
                   </td>
                   <td className="p-4 text-right font-semibold">₹{Number(p.price).toFixed(2)}</td>
                   <td className="p-4 text-right text-green-600 font-semibold">
-                    {p.discount_price ? `₹${Number(p.discount_price).toFixed(2)}` : <span className="text-slate-300">—</span>}
+                    {p.discount_price != null ? `₹${Number(p.discount_price).toFixed(2)}` : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="p-4 text-center">
                     <span className={`font-bold text-sm ${Number(p.stock) === 0 ? "rounded-md bg-slate-900 px-2 py-1 text-white" : p.isLowStock ? "text-red-600" : "text-slate-700"}`}>{p.stock} {p.unit || "piece"}</span>
@@ -363,6 +390,9 @@ function Inventory() {
             submitLabel="Add Product"
             showExpiry={showExpiry}
             storeType={activeStoreType}
+            stores={stores}
+            allowStoreSelection={isSuperAdmin}
+            saving={savingProduct}
           />
         </ProductModal>
       )}
@@ -375,6 +405,7 @@ function Inventory() {
             submitLabel="Save Changes"
             showExpiry={showExpiry}
             storeType={activeStoreType}
+            saving={savingProduct}
           />
         </ProductModal>
       )}
@@ -425,7 +456,7 @@ function ProductModal({ title, children, onClose }) {
   );
 }
 
-function ProductForm({ product, setProduct, onSubmit, submitLabel, showExpiry, storeType }) {
+function ProductForm({ product, setProduct, onSubmit, submitLabel, showExpiry, storeType, stores = [], allowStoreSelection = false, saving = false }) {
   const user = JSON.parse(localStorage.getItem("user"));
   const [storeCategories, setStoreCategories] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -484,8 +515,19 @@ function ProductForm({ product, setProduct, onSubmit, submitLabel, showExpiry, s
           <span>{STORE_TYPE_META[storeType]?.emoji}</span>
           <span>{storeType}</span>
           <span className="ml-auto opacity-70">
-            {showExpiry ? "Expiry date required" : "No expiry tracking"}
+            {showExpiry ? "Expiry tracking available" : "No expiry tracking"}
           </span>
+        </div>
+      )}
+
+      {allowStoreSelection && (
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mb-1">Owning Store *</label>
+          <select value={product.storeId || ""} onChange={e => setProduct({ ...product, storeId: e.target.value })}
+            className="border border-slate-200 p-2.5 w-full rounded-lg text-sm focus:ring-2 focus:ring-green-400 outline-none">
+            <option value="">Choose a store</option>
+            {stores.map(store => <option key={store._id} value={store._id}>{store.name}</option>)}
+          </select>
         </div>
       )}
 
@@ -497,6 +539,7 @@ function ProductForm({ product, setProduct, onSubmit, submitLabel, showExpiry, s
           <label className="block text-xs font-semibold text-slate-600 mb-1">{f.label}</label>
           <input className="border border-slate-200 p-2.5 w-full rounded-lg text-sm focus:ring-2 focus:ring-green-400 outline-none"
             placeholder={f.placeholder} value={product[f.key]}
+            maxLength={f.key === "name" ? 120 : 80}
             onChange={e => setProduct({ ...product, [f.key]: e.target.value })} />
         </div>
       ))}
@@ -587,7 +630,7 @@ function ProductForm({ product, setProduct, onSubmit, submitLabel, showExpiry, s
         ].map(f => (
           <div key={f.key}>
             <label className="block text-xs font-semibold text-slate-600 mb-1">{f.label}</label>
-            <input type="number" min="0"
+            <input type="number" min="0" step={f.key === "price" || f.key === "discount_price" ? "0.01" : "1"}
               className="border border-slate-200 p-2.5 w-full rounded-lg text-sm focus:ring-2 focus:ring-green-400 outline-none"
               placeholder={f.placeholder} value={product[f.key] ?? ""}
               onChange={e => setProduct({ ...product, [f.key]: e.target.value })} />
@@ -607,7 +650,7 @@ function ProductForm({ product, setProduct, onSubmit, submitLabel, showExpiry, s
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
           <label className="block text-xs font-semibold text-amber-700 mb-1.5 flex items-center gap-1.5">
             ⏳ Expiry Date
-            <span className="text-amber-500 font-normal">(required for this store type)</span>
+            <span className="text-amber-500 font-normal">(optional)</span>
           </label>
           <input type="date"
             className="border border-amber-300 bg-white p-2.5 w-full rounded-lg text-sm focus:ring-2 focus:ring-amber-400 outline-none"
@@ -630,9 +673,9 @@ function ProductForm({ product, setProduct, onSubmit, submitLabel, showExpiry, s
         </label>
       </div>
 
-      <button onClick={onSubmit}
-        className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-semibold transition">
-        <Save className="w-4 h-4" /> {submitLabel}
+      <button onClick={onSubmit} disabled={saving}
+        className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white py-3 rounded-xl font-semibold transition">
+        <Save className="w-4 h-4" /> {saving ? "Saving..." : submitLabel}
       </button>
     </div>
   );

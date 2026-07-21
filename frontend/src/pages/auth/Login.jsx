@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import axios from "axios";
 import { FaEye, FaEyeSlash, FaStore, FaUser, FaMotorcycle, FaMapMarkerAlt, FaLocationArrow } from "react-icons/fa";
 import { IoFlash } from "react-icons/io5";
-
-const API_BASE = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api" });
+import { API, PUBLIC_API } from "../../services/api";
+import { clearAuthSession } from "../../services/session";
 
 /* ─────────────────────────────────────────
    BARAMATI SERVICE AREA CONFIG
@@ -13,6 +12,11 @@ const API_BASE = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http:/
 ───────────────────────────────────────── */
 const SERVICE_CENTER = { lat: 18.1518, lng: 74.5815 }; // Baramati city center
 const SERVICE_RADIUS_KM = 15;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeDeliveryPhone = (value = "") => value
+  .replace(/\D/g, "")
+  .replace(/^91(?=\d{10}$)/, "");
 
 // Valid pincodes in and around Baramati
 const VALID_PINCODES = [
@@ -64,7 +68,7 @@ function LocationCheck({ onSuccess, onBack }) {
         const { latitude, longitude } = pos.coords;
         // Try to get city name
         try {
-          const { data: d } = await API_BASE.get(`/users/geocode?lat=${latitude}&lon=${longitude}`);
+          const { data: d } = await PUBLIC_API.get(`/users/geocode?lat=${latitude}&lon=${longitude}`);
           const city = d.address?.city || d.address?.town || d.address?.village || "";
           setDetectedCity(city);
         } catch (error) {
@@ -73,7 +77,7 @@ function LocationCheck({ onSuccess, onBack }) {
 
         if (isInServiceArea(latitude, longitude)) {
           localStorage.setItem("userLocation", JSON.stringify({ lat: latitude, lng: longitude, source: "gps" }));
-          API_BASE.put("/users/location", { latitude, longitude }, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }).catch(() => {});
+          API.put("/users/location", { latitude, longitude }).catch(() => {});
           setStep("success");
           setTimeout(onSuccess, 1800);
         } else {
@@ -255,20 +259,27 @@ export default function Login() {
 
   const handleLogin = async () => {
     setError("");
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = normalizeDeliveryPhone(phone);
+
     if (tab === "delivery") {
-      if (!phone || !password) { setError("Enter phone and password"); return; }
+      if (!password) { setError("Enter phone and password"); return; }
+      if (!/^[6-9]\d{9}$/.test(normalizedPhone)) { setError("Enter a valid 10-digit delivery phone"); return; }
     } else {
-      if (!email || !password) { setError("Enter email and password"); return; }
+      if (!password) { setError("Enter email and password"); return; }
+      if (!EMAIL_PATTERN.test(normalizedEmail)) { setError("Enter a valid email address"); return; }
     }
     try {
       setLoading(true);
       if (tab === "delivery") {
-        const res = await API_BASE.post("/delivery-partners/login", { phone, password });
+        const res = await PUBLIC_API.post("/delivery-partners/login", { phone: normalizedPhone, password });
+        clearAuthSession();
         localStorage.setItem("dp_token", res.data.token);
         localStorage.setItem("dp_user", JSON.stringify(res.data.partner));
         navigate("/delivery-dashboard");
       } else {
-        const res = await API_BASE.post("/auth/login", { email, password });
+        const res = await PUBLIC_API.post("/auth/login", { email: normalizedEmail, password });
+        clearAuthSession();
         localStorage.setItem("token", res.data.token);
         localStorage.setItem("user", JSON.stringify(res.data.user));
         const role = res.data.user?.role;
@@ -310,8 +321,7 @@ export default function Login() {
           onBack={() => {
             setShowLocation(false);
             // Clear auth so they're back to login state
-            localStorage.removeItem("token");
-            localStorage.removeItem("user");
+            clearAuthSession();
           }}
         />
       )}
@@ -359,6 +369,7 @@ export default function Login() {
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", display: "block", marginBottom: 6 }}>Phone Number</label>
                   <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="10 digit phone" type="tel"
+                    maxLength={18}
                     style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #e5e7eb", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "'DM Sans', sans-serif" }}
                     onFocus={e => e.target.style.borderColor = "#1a9c3e"} onBlur={e => e.target.style.borderColor = "#e5e7eb"}
                     onKeyDown={e => e.key === "Enter" && handleLogin()} />
@@ -367,6 +378,7 @@ export default function Login() {
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", display: "block", marginBottom: 6 }}>Email Address</label>
                   <input value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" type="email"
+                    maxLength={254}
                     style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid #e5e7eb", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "'DM Sans', sans-serif" }}
                     onFocus={e => e.target.style.borderColor = "#1a9c3e"} onBlur={e => e.target.style.borderColor = "#e5e7eb"}
                     onKeyDown={e => e.key === "Enter" && handleLogin()} />
@@ -376,6 +388,7 @@ export default function Login() {
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", display: "block", marginBottom: 6 }}>Password</label>
                 <div style={{ position: "relative" }}>
                   <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" type={showPass ? "text" : "password"}
+                    maxLength={128}
                     style={{ width: "100%", padding: "12px 44px 12px 14px", borderRadius: 12, border: "1.5px solid #e5e7eb", fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "'DM Sans', sans-serif" }}
                     onFocus={e => e.target.style.borderColor = "#1a9c3e"} onBlur={e => e.target.style.borderColor = "#e5e7eb"}
                     onKeyDown={e => e.key === "Enter" && handleLogin()} />

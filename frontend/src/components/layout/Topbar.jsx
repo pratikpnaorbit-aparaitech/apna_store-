@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AdminProfile from "../../pages/users/AdminProfile";  // ✅ Fixed import
 import NotificationMenu from "../common/NotificationMenu";
+import { clearAuthSession } from "../../services/session";
 
 function Topbar() {
   const [showProfile, setShowProfile] = useState(false);
@@ -15,7 +16,7 @@ function Topbar() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.clear();
+    clearAuthSession();
     window.location.href = "/login";
   };
 

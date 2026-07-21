@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { UserCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { API } from "../../services/api";
 
 function StoreAdmins() {
   const navigate = useNavigate();
@@ -11,18 +12,11 @@ function StoreAdmins() {
   useEffect(() => {
     const fetchStoreAdmins = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch("http://localhost:5000/api/users/admins", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!res.ok) throw new Error("Failed to fetch store admins");
-
-        const data = await res.json();
+        const { data } = await API.get("/users/admins");
         // API returns { success, count, data: [...] }
         setAdmins(data.data || []);
       } catch (err) {
-        setError(err.message);
+        setError(err.response?.data?.message || "Failed to fetch store admins");
       } finally {
         setLoading(false);
       }

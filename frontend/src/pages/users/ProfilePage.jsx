@@ -7,6 +7,7 @@ import {
 } from "react-icons/fa";
 import { MdOutlineLocalOffer } from "react-icons/md";
 import profileBackground from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
+import { clearAuthSession } from "../../services/session";
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -37,10 +38,7 @@ export default function ProfilePage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("cart");
-    localStorage.removeItem("userLocation");
+    clearAuthSession();
     navigate("/login");
   };
 

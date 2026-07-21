@@ -1,10 +1,15 @@
 const Product = require("../models/Product");
-const User = require("../models/User");
 const Store = require("../models/Store");
+const mongoose = require("mongoose");
+const {
+  validateProductImageUrl,
+  validateProductInput,
+} = require("../utils/productInput");
 
 function scopedProductFilter(req, filter = {}) {
   if (req.user.role === "super_admin") return filter;
-  return { ...filter, storeId: req.user.storeId || null };
+  if (!req.user.storeId) return { ...filter, storeId: { $in: [] } };
+  return { ...filter, storeId: req.user.storeId };
 }
 
 /* ── helpers ── */
@@ -54,6 +59,7 @@ function normalize(p, req) {
     is_featured: p.is_featured || false,
     storeId: p.storeId,
     createdBy: p.createdBy,
+    description: p.description || null,
     image: p.image || null,
     image_url: resolvedImageUrl(p, req),
     expiryStatus,
@@ -81,25 +87,49 @@ function imageFilenameFromInput(value = "") {
   return raw;
 }
 
+function productDefaults(product) {
+  return {
+    name: product.name,
+    sku: product.sku,
+    category: product.category,
+    price: product.price,
+    discount_price: product.discount_price,
+    stock: product.stock,
+    unit: product.unit,
+    reorder_level: product.reorder_level,
+    expiryDate: product.expiry_date,
+    is_featured: product.is_featured,
+    description: product.description,
+  };
+}
+
+function productWriteError(res, error, fallbackMessage) {
+  if (error.status === 400 || error.name === "ValidationError" || error.name === "CastError") {
+    return res.status(400).json({ message: error.message });
+  }
+  if (error.code === 11000) {
+    return res.status(409).json({ message: "Product with this SKU already exists" });
+  }
+  console.error(fallbackMessage, error);
+  return res.status(500).json({ message: fallbackMessage });
+}
+
 /* =========================
    GET ALL PRODUCTS
 ========================= */
 exports.getAllProducts = async (req, res) => {
   try {
-    const { role, id: userId } = req.user;
+    const { role, storeId } = req.user;
 
     let query = { is_active: 1 };
 
     if (role === "admin" || role === "staff") {
-      const user = await User.findById(userId).select("storeId");
-
-      if (!user?.storeId) {
-        return res.json([]);
-      }
-
-      query.storeId = user.storeId;
+      query.storeId = storeId;
     } else if (role === "super_admin") {
       if (req.query.storeId) {
+        if (!mongoose.isValidObjectId(req.query.storeId)) {
+          return res.status(400).json({ message: "Invalid store ID" });
+        }
         query.storeId = req.query.storeId;
       }
     }
@@ -146,88 +176,52 @@ exports.getProductById = async (req, res) => {
    ADD PRODUCT
 ========================= */
 exports.addProduct = async (req, res) => {
-  const {
-    name,
-    sku,
-    category,
-    price,
-    discount_price,
-    stock,
-    unit,
-    reorder_level,
-    expiryDate,
-    is_featured,
-  } = req.body;
-
-  if (!name || !sku || !category || price == null || stock == null) {
-    return res.status(400).json({ message: "Missing required fields" });
-  }
-
   try {
-    const existingProduct = await Product.findOne({ sku });
-
-    if (existingProduct) {
-      return res.status(400).json({
-        message: "Product with this SKU already exists",
-      });
-    }
-
-    const user = await User.findById(req.user.id).select("storeId role");
-    const storeId = user?.role === "super_admin" ? req.body.storeId : user?.storeId;
-    if (!storeId) {
+    const input = validateProductInput(req.body);
+    const storeId = req.user.role === "super_admin" ? req.body.storeId : req.user.storeId;
+    if (!storeId || !mongoose.isValidObjectId(storeId)) {
       return res.status(400).json({ message: "A store is required for this product" });
     }
     if (!(await Store.exists({ _id: storeId, isActive: true }))) {
       return res.status(400).json({ message: "Choose a valid active store" });
     }
+    if (await Product.exists({ sku: input.sku })) {
+      return res.status(409).json({ message: "Product with this SKU already exists" });
+    }
+
+    const imageUrl = Object.prototype.hasOwnProperty.call(req.body, "image_url")
+      ? validateProductImageUrl(req.body.image_url)
+      : null;
 
     const newProduct = await Product.create({
-      name,
-      sku,
-      category,
-
-      price: Number(price),
-
-      discount_price: discount_price ? Number(discount_price) : null,
-
-      stock: Number(stock),
-      unit: unit || "piece",
-
-      reorder_level: reorder_level ? Number(reorder_level) : 5,
-
-      expiry_date: expiryDate || null,
-
-      is_featured: is_featured || false,
-
+      name: input.name,
+      sku: input.sku,
+      category: input.category,
+      price: input.price,
+      discount_price: input.discountPrice,
+      stock: input.stock,
+      unit: input.unit,
+      reorder_level: input.reorderLevel,
+      expiry_date: input.expiryDate,
+      is_featured: input.isFeatured,
+      description: input.description,
       is_active: 1,
-
       storeId,
-
       createdBy: req.user.id,
-
       image: req.file
         ? req.file.filename
-        : req.body.image_url
-          ? imageFilenameFromInput(req.body.image_url)
+        : imageUrl
+          ? imageFilenameFromInput(imageUrl)
           : null,
     });
 
-    res.json({
+    return res.status(201).json({
       success: true,
       id: newProduct._id,
+      product: normalize(newProduct, req),
     });
   } catch (err) {
-    console.error("ADD PRODUCT ERROR:", err);
-
-    if (err.name === "ValidationError") {
-      return res.status(400).json({
-        message: err.message,
-      });
-    }
-
-    res.status(500).json({
-      message: "Failed to add product",
-    });
+    return productWriteError(res, err, "Failed to add product");
   }
 };
 
@@ -235,29 +229,17 @@ exports.addProduct = async (req, res) => {
    UPDATE PRODUCT
 ========================= */
 exports.updateProduct = async (req, res) => {
-  const {
-    name,
-    sku,
-    category,
-    price,
-    discount_price,
-    stock,
-    unit,
-    reorder_level,
-    expiryDate,
-    is_featured,
-  } = req.body;
-
   try {
     const target = await Product.findOne(scopedProductFilter(req, {
       _id: req.params.id,
       is_active: 1,
-    })).select("_id");
+    }));
     if (!target) return res.status(404).json({ message: "Product not found" });
 
-    if (sku) {
+    const input = validateProductInput(req.body, productDefaults(target));
+    if (input.sku !== target.sku) {
       const existing = await Product.findOne({
-        sku,
+        sku: input.sku,
         _id: { $ne: req.params.id },
       });
 
@@ -269,26 +251,33 @@ exports.updateProduct = async (req, res) => {
     }
 
     const updateData = {
-      name,
-      sku,
-      category,
-      price: Number(price),
-      discount_price: discount_price ? Number(discount_price) : null,
-      stock: Number(stock),
-      unit: unit || "piece",
-      reorder_level: reorder_level ? Number(reorder_level) : 5,
-      expiry_date: expiryDate || null,
-      is_featured: is_featured || false,
+      name: input.name,
+      sku: input.sku,
+      category: input.category,
+      price: input.price,
+      discount_price: input.discountPrice,
+      stock: input.stock,
+      unit: input.unit,
+      reorder_level: input.reorderLevel,
+      expiry_date: input.expiryDate,
+      is_featured: input.isFeatured,
+      description: input.description,
     };
 
     // Update image if new image uploaded
     if (req.file) {
       updateData.image = req.file.filename;
-    } else if (req.body.image_url) {
-      updateData.image = imageFilenameFromInput(req.body.image_url);
+      updateData.image_url = null;
+    } else if (Object.prototype.hasOwnProperty.call(req.body, "image_url")) {
+      const imageUrl = validateProductImageUrl(req.body.image_url);
+      updateData.image = imageUrl ? imageFilenameFromInput(imageUrl) : null;
+      updateData.image_url = null;
     }
 
-    const updated = await Product.findOneAndUpdate(scopedProductFilter(req, { _id: req.params.id }), updateData, {
+    const updated = await Product.findOneAndUpdate(scopedProductFilter(req, {
+      _id: req.params.id,
+      is_active: 1,
+    }), updateData, {
       returnDocument: "after",
       runValidators: true,
     });
@@ -297,17 +286,9 @@ exports.updateProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    res.json({ success: true });
+    return res.json({ success: true, product: normalize(updated, req) });
   } catch (err) {
-    console.error("UPDATE PRODUCT ERROR:", err);
-
-    if (err.name === "CastError") {
-      return res.status(400).json({ message: "Invalid product ID" });
-    }
-
-    res.status(500).json({
-      message: "Failed to update product",
-    });
+    return productWriteError(res, err, "Failed to update product");
   }
 };
 
@@ -317,7 +298,7 @@ exports.updateProduct = async (req, res) => {
 exports.archiveProduct = async (req, res) => {
   try {
     const product = await Product.findOneAndUpdate(
-      scopedProductFilter(req, { _id: req.params.id }),
+      scopedProductFilter(req, { _id: req.params.id, is_active: 1 }),
       { is_active: 0 },
       { returnDocument: "after" },
     );

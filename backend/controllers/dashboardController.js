@@ -141,7 +141,7 @@ exports.getPaymentChart = async (req, res) => {
       return res.status(403).json({ message: "No store is assigned to this account" });
     const storeFilter = req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
     const paymentChart = await Transaction.aggregate([
-      { $match: storeFilter },
+      { $match: { status: "SUCCESS", ...storeFilter } },
       {
         $group: {
           _id: "$payment_mode",
@@ -172,8 +172,8 @@ exports.getRecentTransactions = async (req, res) => {
     if (req.user.role !== "super_admin" && !req.user.storeId)
       return res.status(403).json({ message: "No store is assigned to this account" });
     const storeFilter = req.user.role === "super_admin" ? {} : { storeId: req.user.storeId };
-    const recentTransactions = await Transaction.find(storeFilter)
-      .select("bill_no total payment_mode created_at")
+    const recentTransactions = await Transaction.find({ status: "SUCCESS", ...storeFilter })
+      .select("bill_no total payment_mode status created_at")
       .sort({ created_at: -1 })
       .limit(5);
 

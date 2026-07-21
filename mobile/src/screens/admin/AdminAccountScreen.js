@@ -9,6 +9,7 @@ import { ROLE_LABELS, ROLES } from "../../navigation/roleConfig";
 import { colors, shadow } from "../../theme";
 import { api, messageFromError } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
+import { confirmLogout as requestLogoutConfirmation } from "../../utils/confirmLogout";
 
 export default function AdminAccountScreen() {
   const { logout, user } = useAuth();
@@ -46,10 +47,11 @@ export default function AdminAccountScreen() {
       setUploading(false);
     }
   };
-  const confirmLogout = () => Alert.alert("Logout", "Return to the customer home in guest mode?", [
-    { text: "Keep working", style: "cancel" },
-    { text: "Logout", style: "destructive", onPress: logout },
-  ]);
+  const confirmLogout = () => requestLogoutConfirmation({
+    message: "Return to the customer home in guest mode?",
+    onConfirm: logout,
+    cancelText: "Keep working",
+  });
 
   return (
     <Screen>

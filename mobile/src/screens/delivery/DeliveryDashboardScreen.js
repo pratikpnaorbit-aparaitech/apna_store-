@@ -64,8 +64,11 @@ export default function DeliveryDashboardScreen({ navigation }) {
     }
   }, []);
 
-  useEffect(() => { loadOrders(); }, [loadOrders]);
-  useFocusEffect(useCallback(() => { loadOrders({ silent: true }); }, [loadOrders]));
+  useFocusEffect(useCallback(() => {
+    loadOrders();
+    const ordersInterval = setInterval(() => loadOrders({ silent: true }), 15000);
+    return () => clearInterval(ordersInterval);
+  }, [loadOrders]));
   useEffect(() => {
     const hasTrackableDelivery = orders.some((order) => ["Picked Up", "Out for Delivery"].includes(order.status));
     if (hasTrackableDelivery) startLocationSharing();

@@ -8,6 +8,7 @@ import {
   FaUser,
   FaSignOutAlt,
 } from "react-icons/fa";
+import { clearAuthSession } from "../../services/session";
 
 export default function UserSidebar() {
   const location = useLocation();
@@ -23,9 +24,8 @@ export default function UserSidebar() {
   ];
 
   const handleLogout = () => {
-    localStorage.removeItem("token"); // remove auth token
-    localStorage.removeItem("user");  // optional user data
-    navigate("/login");               // redirect to login
+    clearAuthSession();
+    navigate("/login");
   };
 
   return (

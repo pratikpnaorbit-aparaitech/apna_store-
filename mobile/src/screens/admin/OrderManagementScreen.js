@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Screen from "../../components/Screen";
 import { ActionButton, AdminHeader, EmptyBlock, ErrorBlock, LoadingBlock, SearchBox, StatusPill, adminStyles } from "../../components/admin/AdminUI";
@@ -11,10 +12,17 @@ import { useAuth } from "../../context/AuthContext";
 import { ROLE_LABELS, ROLES } from "../../navigation/roleConfig";
 import { colors } from "../../theme";
 import { useToast } from "../../context/ToastContext";
+import { confirmAction } from "../../utils/confirmAction";
 
 const STATUSES = ["Placed", "Confirmed", "Preparing", "Picked Up", "Out for Delivery", "Delivered", "Cancelled"];
 const FILTERS = ["All", ...STATUSES];
-const STATUS_OPTIONS = STATUSES.filter((status) => status !== "Delivered");
+const ADMIN_NEXT_STATUSES = {
+  Placed: ["Confirmed", "Cancelled"],
+  Confirmed: ["Preparing", "Cancelled"],
+  Preparing: ["Cancelled"],
+};
+const nextStatuses = (order) => ADMIN_NEXT_STATUSES[order?.status] || [];
+const isProcessable = (order) => order?.paymentMethod !== "Razorpay" || order?.paymentStatus === "paid";
 
 export default function OrderManagementScreen({ navigation }) {
   const { user } = useAuth();
@@ -36,8 +44,9 @@ export default function OrderManagementScreen({ navigation }) {
   const canAssign = [ROLES.ADMIN, ROLES.SUPER_ADMIN].includes(user?.role);
 
   const storeId = user?.storeId?._id || user?.storeId;
-  const load = useCallback(async (refresh = false) => {
-    refresh ? setRefreshing(true) : setLoading(true);
+  const load = useCallback(async (refresh = false, silent = false) => {
+    if (refresh) setRefreshing(true);
+    else if (!silent) setLoading(true);
     try {
       const orderUrl = superAdmin ? "/orders/all" : `/orders/store/${storeId}`;
       if (!superAdmin && !storeId) throw new Error("No store is assigned to this account.");
@@ -55,7 +64,11 @@ export default function OrderManagementScreen({ navigation }) {
     }
   }, [canAssign, storeId, superAdmin]);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => {
+    load();
+    const interval = setInterval(() => load(false, true), 15000);
+    return () => clearInterval(interval);
+  }, [load]));
 
   const shown = useMemo(() => orders.filter((order) => {
     const matchesFilter = filter === "All" || order.status === filter;
@@ -89,10 +102,13 @@ export default function OrderManagementScreen({ navigation }) {
       setStatusOrder({ ...order, requestedStatus: status });
       return;
     }
-    Alert.alert("Change order status?", `${String(order._id).slice(-6).toUpperCase()} will move from ${order.status} to ${status}.`, [
-      { text: "Keep current", style: "cancel" },
-      { text: "Update", onPress: () => changeStatus(order, status) },
-    ]);
+    confirmAction({
+      title: "Change order status?",
+      message: `${String(order._id).slice(-6).toUpperCase()} will move from ${order.status} to ${status}.`,
+      cancelText: "Keep current",
+      confirmText: "Update",
+      onConfirm: () => changeStatus(order, status),
+    });
   };
 
   const assign = async (partner) => {
@@ -171,10 +187,11 @@ export default function OrderManagementScreen({ navigation }) {
               <Text style={styles.address} numberOfLines={2}>{[item.address?.street, item.address?.city, item.address?.pincode].filter(Boolean).join(", ") || "Address unavailable"}</Text>
               <Text style={styles.items} numberOfLines={3}>{(item.items || []).map((product) => `${product.quantity}× ${product.name}`).join(" • ")}</Text>
               <View style={styles.payment}><Text style={styles.paymentText}>{item.paymentMethod || "COD"} • {item.paymentStatus || "pending"}</Text>{item.deliveryPartnerId ? <Text style={styles.partner}>🛵 {item.deliveryPartnerId.name}</Text> : null}</View>
+              {!isProcessable(item) ? <Text style={styles.paymentBlocked}>Online payment is not verified. Processing is locked.</Text> : null}
               <View style={adminStyles.actions}>
                 <ActionButton icon="document-text-outline" label={invoiceId === item._id ? "Preparing…" : "Invoice"} disabled={Boolean(invoiceId)} onPress={() => downloadInvoice(item)} />
-                <ActionButton icon="swap-horizontal-outline" label="Status" disabled={busyId === item._id} onPress={() => setStatusOrder(item)} />
-                {canAssign && item.status !== "Cancelled" && item.status !== "Delivered" ? <ActionButton icon="bicycle-outline" label={item.deliveryPartnerId ? "Reassign" : "Assign delivery"} disabled={busyId === item._id} onPress={() => setAssignOrder(item)} /> : null}
+                {isProcessable(item) && nextStatuses(item).length ? <ActionButton icon="swap-horizontal-outline" label="Status" disabled={busyId === item._id} onPress={() => setStatusOrder(item)} /> : null}
+                {canAssign && isProcessable(item) && ["Placed", "Confirmed", "Preparing"].includes(item.status) ? <ActionButton icon="bicycle-outline" label={item.deliveryPartnerId ? "Reassign" : "Assign delivery"} disabled={busyId === item._id} onPress={() => setAssignOrder(item)} /> : null}
               </View>
             </View>
           )}
@@ -197,7 +214,7 @@ export default function OrderManagementScreen({ navigation }) {
               </>
             ) : (
               <>
-                <View style={styles.statusGrid}>{STATUS_OPTIONS.map((status) => <Pressable key={status} disabled={status === statusOrder?.status} onPress={() => selectStatus(statusOrder, status)} style={[styles.statusChoice, status === statusOrder?.status && styles.statusCurrent, status === "Cancelled" && styles.statusDanger]}><Text style={[styles.statusChoiceText, status === statusOrder?.status && styles.statusCurrentText, status === "Cancelled" && { color: colors.danger }]}>{status}</Text></Pressable>)}</View>
+                <View style={styles.statusGrid}>{nextStatuses(statusOrder).map((status) => <Pressable key={status} onPress={() => selectStatus(statusOrder, status)} style={[styles.statusChoice, status === "Cancelled" && styles.statusDanger]}><Text style={[styles.statusChoiceText, status === "Cancelled" && { color: colors.danger }]}>{status}</Text></Pressable>)}</View>
                 <Text style={styles.otpNote}>Delivered status is set only after the delivery partner verifies the customer OTP.</Text>
                 <Pressable onPress={() => setStatusOrder(null)} style={[adminStyles.cancelButton, { marginTop: 12 }]}><Text style={adminStyles.cancelText}>Close</Text></Pressable>
               </>
@@ -212,14 +229,22 @@ export default function OrderManagementScreen({ navigation }) {
             <Text style={adminStyles.modalTitle}>Assign delivery partner</Text>
             <Text style={styles.modalHelp}>Only active and available partners can be selected.</Text>
             <ScrollView style={{ maxHeight: 420 }}>
-              {partners.filter((partner) => partner.isActive && partner.isAvailable).map((partner) => (
+              {partners.filter((partner) => {
+                const orderStoreId = assignOrder?.storeId?._id || assignOrder?.storeId;
+                const partnerStoreId = partner.storeId?._id || partner.storeId;
+                return partner.isActive && partner.isAvailable && (!partnerStoreId || String(partnerStoreId) === String(orderStoreId || ""));
+              }).map((partner) => (
                 <Pressable key={partner._id} onPress={() => assign(partner)} style={styles.partnerChoice}>
                   <View style={styles.partnerIcon}><Ionicons name="bicycle" size={21} color={colors.purple} /></View>
                   <View style={{ flex: 1 }}><Text style={adminStyles.cardTitle}>{partner.name}</Text><Text style={adminStyles.cardSub}>{partner.phone} • {partner.vehicleType || "vehicle"} {partner.vehicleNumber || ""}</Text></View>
                   {busyId ? <ActivityIndicator color={colors.purple} /> : <Ionicons name="chevron-forward" size={18} color={colors.muted} />}
                 </Pressable>
               ))}
-              {!partners.some((partner) => partner.isActive && partner.isAvailable) ? <EmptyBlock title="No partner available" message="Create or activate a delivery partner first." /> : null}
+              {!partners.some((partner) => {
+                const orderStoreId = assignOrder?.storeId?._id || assignOrder?.storeId;
+                const partnerStoreId = partner.storeId?._id || partner.storeId;
+                return partner.isActive && partner.isAvailable && (!partnerStoreId || String(partnerStoreId) === String(orderStoreId || ""));
+              }) ? <EmptyBlock title="No partner available" message="Create or activate a delivery partner first." /> : null}
             </ScrollView>
             <Pressable onPress={() => setAssignOrder(null)} style={[adminStyles.cancelButton, { marginTop: 12 }]}><Text style={adminStyles.cancelText}>Close</Text></Pressable>
           </View>
@@ -244,6 +269,7 @@ const styles = StyleSheet.create({
   items: { color: colors.ink, fontSize: 11, lineHeight: 17, marginTop: 8 },
   payment: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#F6FAF7", borderRadius: 12, padding: 10, marginTop: 11 },
   paymentText: { color: colors.muted, fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
+  paymentBlocked: { color: colors.danger, fontSize: 10.5, fontWeight: "800", marginTop: 8 },
   partner: { color: colors.purpleDark, fontSize: 10.5, fontWeight: "800" },
   modalHelp: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: -9, marginBottom: 15 },
   statusGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

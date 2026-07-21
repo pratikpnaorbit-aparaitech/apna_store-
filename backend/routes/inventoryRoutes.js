@@ -2,9 +2,13 @@ const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const allowRoles = require("../middleware/roleMiddleware");
+const requireStoreContext = require("../middleware/storeContextMiddleware");
 const inventoryController = require("../controllers/inventoryController");
 const Product = require("../models/Product");
+const Store = require("../models/Store");
+const mongoose = require("mongoose");
 const upload = require("../middleware/uploadMiddleware");
+const { sellableExpiryFilter } = require("../utils/productAvailability");
 
 const uploadOrigin = (req) => `${req.protocol}://${req.get("host")}`;
 const uploadUrl = (req, filename) => `${uploadOrigin(req)}/uploads/${encodeURIComponent(filename)}`;
@@ -52,9 +56,19 @@ router.get("/public", async (req, res) => {
   try {
     const { category, storeId, featured } = req.query;
 
-    let query = { is_active: 1 };
+    let query = { is_active: 1, ...sellableExpiryFilter() };
     if (category) query.category = category;
-    if (storeId) query.storeId = storeId;
+    if (storeId) {
+      if (!mongoose.isValidObjectId(storeId)) {
+        return res.status(400).json({ message: "Invalid store ID" });
+      }
+      if (!(await Store.exists({ _id: storeId, isActive: true }))) {
+        return res.json([]);
+      }
+      query.storeId = storeId;
+    } else {
+      query.storeId = { $in: await Store.find({ isActive: true }).distinct("_id") };
+    }
     if (featured === "true") query.is_featured = true;
     if (req.query.search) {
       query.name = { $regex: req.query.search, $options: "i" };
@@ -93,12 +107,20 @@ router.get("/public", async (req, res) => {
 ========================= */
 router.get("/public/:id", async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id).populate(
-      "storeId",
-      "name categories",
-    );
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid product ID" });
+    }
+    const product = await Product.findOne({
+      _id: req.params.id,
+      is_active: 1,
+      ...sellableExpiryFilter(),
+    }).populate({
+      path: "storeId",
+      match: { isActive: true },
+      select: "name categories",
+    });
 
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!product?.storeId) return res.status(404).json({ message: "Product not found" });
 
     res.json({
       _id: product._id,
@@ -129,6 +151,7 @@ router.post(
   "/upload-image",
   authMiddleware,
   allowRoles(["admin", "super_admin"]),
+  requireStoreContext,
   upload.single("image"),
   (req, res) => {
     if (!req.file)
@@ -156,6 +179,7 @@ router.get(
   "/",
   authMiddleware,
   allowRoles(["admin", "staff", "super_admin"]),
+  requireStoreContext,
   inventoryController.getAllProducts,
 );
 
@@ -167,6 +191,7 @@ router.get(
   "/:id",
   authMiddleware,
   allowRoles(["admin", "staff", "super_admin"]),
+  requireStoreContext,
   inventoryController.getProductById,
 );
 
@@ -179,6 +204,7 @@ router.post(
   "/",
   authMiddleware,
   allowRoles(["admin", "super_admin"]),
+  requireStoreContext,
   upload.single("image"),
   inventoryController.addProduct,
 );
@@ -192,6 +218,7 @@ router.put(
   "/:id",
   authMiddleware,
   allowRoles(["admin", "super_admin"]),
+  requireStoreContext,
   upload.single("image"),
   inventoryController.updateProduct,
 );
@@ -204,6 +231,7 @@ router.delete(
   "/:id",
   authMiddleware,
   allowRoles(["admin", "super_admin"]),
+  requireStoreContext,
   inventoryController.archiveProduct,
 );
 

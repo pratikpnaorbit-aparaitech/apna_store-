@@ -6,6 +6,9 @@ const deliveryRouter = require("../routes/deliveryPartnerRoutes");
 const orderRouter = require("../routes/ordersRoutes");
 const Order = require("../models/Order");
 const Otp = require("../models/Otp");
+const inventoryRouter = require("../routes/inventoryRoutes");
+const productRouter = require("../routes/productRoutes");
+const inventoryController = require("../controllers/inventoryController");
 
 const routeContracts = (router) => router.stack
   .filter((layer) => layer.route)
@@ -34,6 +37,7 @@ test("password recovery routes are registered", () => {
 test("delivery authentication and session-check routes are registered", () => {
   const routes = routeContracts(deliveryRouter);
   assert.ok(routes.includes("POST /login"));
+  assert.ok(routes.includes("GET /me"));
   assert.ok(routes.includes("GET /my-orders"));
 });
 
@@ -50,4 +54,21 @@ test("tracking and verified registration schema fields are available", () => {
   assert.ok(Order.schema.path("deliveryPartnerLocation.updatedAt"));
   assert.ok(Otp.schema.path("verified"));
   assert.ok(Otp.schema.path("registrationData.passwordHash"));
+});
+
+test("inventory routes require authentication, roles and store context", () => {
+  const protectedRoutes = inventoryRouter.stack.filter((layer) => layer.route && layer.route.path !== "/public" && layer.route.path !== "/public/:id");
+  for (const layer of protectedRoutes) {
+    const middlewareNames = layer.route.stack.map((entry) => entry.name);
+    assert.ok(middlewareNames.includes("requireStoreContext"), `${layer.route.path} must require store context`);
+  }
+});
+
+test("legacy product creation uses the same protected store-scoped controller", () => {
+  const postRoute = productRouter.stack.find((layer) => layer.route?.path === "/" && layer.route.methods.post);
+  assert.ok(postRoute);
+  const middlewareNames = postRoute.route.stack.map((entry) => entry.name);
+  assert.ok(middlewareNames.includes("verifyToken"));
+  assert.ok(middlewareNames.includes("requireStoreContext"));
+  assert.equal(postRoute.route.stack.at(-1).handle, inventoryController.addProduct);
 });

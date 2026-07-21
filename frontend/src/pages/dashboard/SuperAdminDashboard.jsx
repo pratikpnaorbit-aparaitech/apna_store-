@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { API } from "../../services/api";
+import { clearAuthSession } from "../../services/session";
 import { Link, useNavigate } from "react-router-dom";
 
 function SuperAdminDashboard() {
@@ -55,7 +56,7 @@ function SuperAdminDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
+    clearAuthSession();
     navigate("/login");
   };
 

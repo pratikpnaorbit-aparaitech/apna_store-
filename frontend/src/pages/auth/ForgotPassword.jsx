@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { API } from "../../services/api";
+import { PUBLIC_API } from "../../services/api";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -15,9 +17,15 @@ export default function ForgotPassword() {
   const sendOtp = async () => {
     setError("");
     setMessage("");
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      setError("Enter a valid email address");
+      return;
+    }
     try {
       setLoading(true);
-      const { data } = await API.post("/auth/forgot-password-otp", { email });
+      const { data } = await PUBLIC_API.post("/auth/forgot-password-otp", { email: normalizedEmail });
+      setEmail(normalizedEmail);
       setOtpSent(true);
       setMessage(data.message);
     } catch (err) {
@@ -30,9 +38,13 @@ export default function ForgotPassword() {
   const resetPassword = async (event) => {
     event.preventDefault();
     setError("");
+    if (!/^\d{6}$/.test(otp) || newPassword.length < 6) {
+      setError("Enter the 6-digit code and a password of at least 6 characters");
+      return;
+    }
     try {
       setLoading(true);
-      await API.post("/auth/reset-password", { email, otp, newPassword });
+      await PUBLIC_API.post("/auth/reset-password", { email, otp, newPassword });
       alert("Password reset successfully. Please login.");
       navigate("/login");
     } catch (err) {
@@ -54,7 +66,7 @@ export default function ForgotPassword() {
         {message && <div className="bg-emerald-100 text-emerald-700 text-sm p-3 rounded-lg mb-4">{message}</div>}
 
         <form onSubmit={resetPassword} className="space-y-4">
-          <input type="email" className={inputClass} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input type="email" className={inputClass} placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} required />
           <button type="button" onClick={sendOtp} disabled={loading || !email} className="w-full bg-slate-700 hover:bg-slate-800 disabled:opacity-60 text-white py-3 rounded-xl font-semibold">
             {otpSent ? "Resend OTP" : "Send OTP"}
           </button>
@@ -62,7 +74,7 @@ export default function ForgotPassword() {
           {otpSent && (
             <>
               <input type="text" inputMode="numeric" className={inputClass} placeholder="6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} required />
-              <input type="password" className={inputClass} placeholder="New password (minimum 6 characters)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={6} required />
+              <input type="password" className={inputClass} placeholder="New password (minimum 6 characters)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={6} maxLength={128} required />
               <button type="submit" disabled={loading} className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white py-3 rounded-xl font-semibold">
                 {loading ? "Resetting..." : "Reset Password"}
               </button>

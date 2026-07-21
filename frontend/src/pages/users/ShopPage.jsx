@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import axios from "axios";
 import { FaArrowLeft, FaSearch, FaMapMarkerAlt, FaPhone, FaHeart, FaRegHeart } from "react-icons/fa";
 import groceryStoreHero from "../../assets/images/store-covers/grocery-store-hero-v1.jpg";
-
-const PUBLIC = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api" });
+import { PUBLIC_API as PUBLIC } from "../../services/api";
 
 // Helper: safely format address object or string
 const formatAddress = (address) => {

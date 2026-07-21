@@ -79,7 +79,7 @@ const OrderSchema = new mongoose.Schema(
     cancellationReason: { type: String, default: null, maxlength: 500 },
     cancelledBy: {
       type: String,
-      enum: ["user", "admin", "staff", "super_admin", null],
+      enum: ["user", "admin", "staff", "super_admin", "system", null],
       default: null,
     },
     cancelledAt: { type: Date, default: null },
@@ -89,6 +89,8 @@ const OrderSchema = new mongoose.Schema(
     deliveryOtpExpiresAt: { type: Date, default: null },
     deliveryOtpVerifiedAt: { type: Date, default: null },
     deliveryOtpUsed: { type: Boolean, default: false },
+    deliveryOtpAttempts: { type: Number, default: 0, min: 0 },
+    deliveryOtpLastSentAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
